@@ -1,0 +1,18 @@
+chore: initial commit — bootstrap Tauri 2.0 + React 19 + Rust backend for JoyCore-X
+
+Project setup and migration scaffold from Qt6/C++ to Tauri + React + Rust.
+
+- Configure Tauri app and permissions (tauri.conf.json)
+- Add Rust backend structure (src-tauri/)
+  - serial: interface + protocol parsing, USB discovery (VID 0x2E8A, PID 0xA02F), 115200 baud
+  - device: manager + models + state handling and error recovery
+  - Tauri commands for frontend-backend IPC
+- Add React frontend (src/)
+  - components: Dashboard, DeviceConnection, ConfigurationTabs
+  - hooks: useDevice for device state
+  - lib: tauri command wrappers
+- Install and wire shadcn/ui (Radix + Tailwind v4), react-hook-form + zod, Recharts
+- Add documentation: MIGRATION_PROGRESS.md with phases, architecture, and testing plan
+- Theme variables and baseline styling in place
+
+Status: Backend and core UI complete; app launches and integrates; ready for hardware testing.

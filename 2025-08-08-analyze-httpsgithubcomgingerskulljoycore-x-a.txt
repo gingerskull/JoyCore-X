@@ -1,0 +1,129 @@
+
+     ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+     │ JoyCore-X Migration Plan: Qt/C++ to Tauri/React with shadcn/ui                                                                                          │
+     │                                                                                                                                                         │
+     │ Project Overview                                                                                                                                        │
+     │                                                                                                                                                         │
+     │ Migrate the Qt6-based JoyCore-X HOTAS configuration dashboard to a modern Tauri application using shadcn/ui components for a consistent, accessible UI. │
+     │                                                                                                                                                         │
+     │ Phase 1: Project Setup & Architecture (Week 1)                                                                                                          │
+     │                                                                                                                                                         │
+     │ 1. Tauri Integration                                                                                                                                    │
+     │   - Install Tauri CLI and dependencies                                                                                                                  │
+     │   - Configure Tauri for the existing React/Vite project                                                                                                 │
+     │   - Set up Rust backend structure for serial communication                                                                                              │
+     │   - Create tauri.conf.json with appropriate permissions                                                                                                 │
+     │ 2. shadcn/ui Setup                                                                                                                                      │
+     │   - Install remaining shadcn/ui components needed                                                                                                       │
+     │   - Configure components.json for the project                                                                                                           │
+     │   - Set up theme configuration with CSS variables                                                                                                       │
+     │   - Create MIGRATION_PROGRESS.md to track development                                                                                                   │
+     │                                                                                                                                                         │
+     │ Phase 2: Backend Migration (Week 2-3)                                                                                                                   │
+     │                                                                                                                                                         │
+     │ 1. Serial Communication Layer                                                                                                                           │
+     │   - Port SerialInterface and SerialProtocol from C++ to Rust                                                                                            │
+     │   - Implement USB device discovery (VID: 0x2E8A, PID: 0xA02F)                                                                                           │
+     │   - Create Tauri commands for frontend-backend communication                                                                                            │
+     │   - Implement protocol parser for firmware communication                                                                                                │
+     │ 2. Device Management                                                                                                                                    │
+     │   - Create Rust modules for device management                                                                                                           │
+     │   - Implement configuration models in Rust                                                                                                              │
+     │   - Set up state management for connected devices                                                                                                       │
+     │   - Add error handling and recovery mechanisms                                                                                                          │
+     │                                                                                                                                                         │
+     │ Phase 3: Frontend Development with shadcn/ui (Week 3-4)                                                                                                 │
+     │                                                                                                                                                         │
+     │ 1. Core UI Components                                                                                                                                   │
+     │   - Layout: Use shadcn/ui Sheet for sidebars, Dialog for modals                                                                                         │
+     │   - Navigation: Tabs component for different config sections                                                                                            │
+     │   - Forms: Form, Input, Select, Switch for configuration                                                                                                │
+     │   - Feedback: Toast, Alert, Progress for user notifications                                                                                             │
+     │   - Data Display: Table, Card for device information                                                                                                    │
+     │ 2. Dashboard Structure                                                                                                                                  │
+     │ - Main Dashboard (Card-based layout)                                                                                                                    │
+     │   - Device Connection Card (Card + Badge + Button)                                                                                                      │
+     │   - Configuration Tabs (Tabs + TabsList + TabsContent)                                                                                                  │
+     │     - Axis Configuration (Form + Slider + Input)                                                                                                        │
+     │     - Button Mapping (Table + Select + Switch)                                                                                                          │
+     │     - Profile Management (Card + DropdownMenu)                                                                                                          │
+     │   - Status Bar (Alert + Progress)                                                                                                                       │
+     │ 3. State Management                                                                                                                                     │
+     │   - React Context with TypeScript interfaces                                                                                                            │
+     │   - Custom hooks for Tauri integration                                                                                                                  │
+     │   - Real-time updates with Tauri events                                                                                                                 │
+     │   - Form state with react-hook-form + zod                                                                                                               │
+     │                                                                                                                                                         │
+     │ Phase 4: Feature Implementation (Week 4-5)                                                                                                              │
+     │                                                                                                                                                         │
+     │ 1. Device Configuration UI                                                                                                                              │
+     │   - Connection Panel: Card with connection status Badge                                                                                                 │
+     │   - Axis Settings: Slider components with Input for precise values                                                                                      │
+     │   - Button Mapping: DataTable with inline editing                                                                                                       │
+     │   - Profile Selector: Select with DropdownMenu for actions                                                                                              │
+     │   - Import/Export: Dialog with FileTrigger                                                                                                              │
+     │ 2. Advanced Features                                                                                                                                    │
+     │   - Command Palette: (Cmd+K) for quick actions                                                                                                          │
+     │   - Theme Toggle: Light/Dark mode with Toggle                                                                                                           │
+     │   - Keyboard Shortcuts: using shadcn/ui kbd component                                                                                                   │
+     │   - Context Menus: for right-click actions                                                                                                              │
+     │                                                                                                                                                         │
+     │ Phase 5: Testing & Polish (Week 5-6)                                                                                                                    │
+     │                                                                                                                                                         │
+     │ 1. UI Polish                                                                                                                                            │
+     │   - Consistent spacing using Tailwind classes                                                                                                           │
+     │   - Loading states with Skeleton components                                                                                                             │
+     │   - Error boundaries with Alert components                                                                                                              │
+     │   - Animations with framer-motion integration                                                                                                           │
+     │ 2. Accessibility                                                                                                                                        │
+     │   - Keyboard navigation testing                                                                                                                         │
+     │   - Screen reader compatibility                                                                                                                         │
+     │   - ARIA labels and descriptions                                                                                                                        │
+     │   - Focus management                                                                                                                                    │
+     │                                                                                                                                                         │
+     │ Technical Implementation Details                                                                                                                        │
+     │                                                                                                                                                         │
+     │ Backend Stack:                                                                                                                                          │
+     │ - Tauri 2.0+ for native integration                                                                                                                     │
+     │ - Rust with tokio for async operations                                                                                                                  │
+     │ - serialport-rs for USB serial communication                                                                                                            │
+     │ - serde for serialization                                                                                                                               │
+     │                                                                                                                                                         │
+     │ Frontend Stack:                                                                                                                                         │
+     │ - React 19 with TypeScript                                                                                                                              │
+     │ - shadcn/ui components (Radix UI + Tailwind)                                                                                                            │
+     │ - react-hook-form for form management                                                                                                                   │
+     │ - zod for validation                                                                                                                                    │
+     │ - Recharts/tremor for data visualization                                                                                                                │
+     │                                                                                                                                                         │
+     │ Key Files to Create:                                                                                                                                    │
+     │ 1. src-tauri/src/main.rs - Tauri entry point                                                                                                            │
+     │ 2. src-tauri/src/serial/mod.rs - Serial communication                                                                                                   │
+     │ 3. src-tauri/src/device/mod.rs - Device management                                                                                                      │
+     │ 4. src/components/Dashboard.tsx - Main dashboard using Card layout                                                                                      │
+     │ 5. src/components/DeviceConnection.tsx - Connection UI with shadcn/ui                                                                                   │
+     │ 6. src/components/ConfigurationTabs.tsx - Tabbed config interface                                                                                       │
+     │ 7. src/hooks/useDevice.ts - Device state hook                                                                                                           │
+     │ 8. MIGRATION_PROGRESS.md - Progress tracking                                                                                                            │
+     │                                                                                                                                                         │
+     │ shadcn/ui Components to Install:                                                                                                                        │
+     │ - Card, Button, Input, Label, Select                                                                                                                    │
+     │ - Tabs, Dialog, Sheet, DropdownMenu                                                                                                                     │
+     │ - Form, Toast, Alert, Badge, Progress                                                                                                                   │
+     │ - Table, Slider, Switch, Toggle                                                                                                                         │
+     │ - Skeleton, Separator, ScrollArea                                                                                                                       │
+     │ - Command (for command palette)                                                                                                                         │
+     │                                                                                                                                                         │
+     │ UI Theme Structure:                                                                                                                                     │
+     │ /* CSS variables for theming */                                                                                                                         │
+     │ --background, --foreground                                                                                                                              │
+     │ --card, --card-foreground                                                                                                                               │
+     │ --primary, --primary-foreground                                                                                                                         │
+     │ --secondary, --secondary-foreground                                                                                                                     │
+     │ --muted, --muted-foreground                                                                                                                             │
+     │ --accent, --accent-foreground                                                                                                                           │
+     │ --destructive, --destructive-foreground                                                                                                                 │
+     │                                                                                                                                                         │
+     │ This plan creates a modern, accessible dashboard using shadcn/ui's consistent component library while maintaining all JoyCore-X functionality.          │
+     ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+

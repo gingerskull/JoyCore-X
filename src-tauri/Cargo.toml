@@ -1,0 +1,41 @@
+[package]
+name = "joycore-x"
+version = "0.1.0"
+description = "HOTAS Configuration Dashboard for JoyCore firmware"
+authors = ["JoyCore Team"]
+license = "GPL-3.0"
+repository = "https://github.com/gingerskull/JoyCore-X-tauri"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "joycore_x_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.3.1" }
+
+[dependencies]
+# Core framework
+tauri = { version = "2.7.0" }
+tauri-plugin-log = "2"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Serial communication
+serialport = "4.5"
+tokio-serial = "5.4"
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Utilities
+log = "0.4"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
