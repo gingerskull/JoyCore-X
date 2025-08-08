@@ -1,69 +1,50 @@
-# React + TypeScript + Vite
+# JoyCore-X
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern configuration dashboard for JoyCore-FW controllers, built with Tauri, React, and Rust.
 
-Currently, two official plugins are available:
+## 🚧 Work in Progress
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This project is currently being migrated from the [original Qt6/C++ implementation](https://github.com/gingerskull/JoyCore-X) to a modern Tauri-based application. Core functionality is implemented but hardware testing is pending.
 
-## Expanding the ESLint configuration
+## Overview
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+JoyCore-X provides a desktop application for configuring RP2040-based HOTAS controllers via USB serial communication. Configure axes, buttons, and profiles through an intuitive interface.
+## Tech Stack
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- **Backend**: Rust + Tauri 2.0 for native integration and serial communication
+- **Frontend**: React 19 + TypeScript + shadcn/ui components
+- **Styling**: Tailwind CSS v4
+- **Device Communication**: USB Serial (CDC) @ 115200 baud
+- **Target Hardware**: RP2040-based controllers (VID: 0x2E8A, PID: 0xA02F)
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+## Current Status
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- ✅ Tauri backend with serial communication
+- ✅ React frontend with modern UI components
+- ✅ Device discovery and connection management
+- ✅ Configuration interfaces (axes, buttons, profiles)
+- 🔄 Hardware testing pending
+- ⏳ Advanced features in development
+
+## Development Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Run development server
+npm run tauri dev
+
+# Build for production
+npm run tauri build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Requirements
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- Node.js 18+
+- Rust 1.70+
+- Tauri CLI
+- Compatible JoyCore hardware for testing
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+
+See [MIGRATION_PROGRESS.md](./MIGRATION_PROGRESS.md) for detailed development status and roadmap.
