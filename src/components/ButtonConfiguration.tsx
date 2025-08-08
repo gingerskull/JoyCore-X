@@ -14,54 +14,67 @@ import type { DeviceStatus, ButtonConfig } from '@/lib/types';
 
 interface ButtonConfigurationProps {
   deviceStatus: DeviceStatus | null;
+  isConnected?: boolean;
+  buttonConfigs?: ButtonConfig[];
+  onConfigUpdate?: (configs: ButtonConfig[]) => void;
 }
 
-export function ButtonConfiguration({ deviceStatus }: ButtonConfigurationProps) {
-  const [buttonConfigs, setButtonConfigs] = useState<ButtonConfig[]>([]);
+export function ButtonConfiguration({ deviceStatus, isConnected = false, buttonConfigs, onConfigUpdate }: ButtonConfigurationProps) {
+  const [localButtonConfigs, setLocalButtonConfigs] = useState<ButtonConfig[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load button configurations
-  useEffect(() => {
-    const loadButtonConfigurations = async () => {
-      if (!deviceStatus || deviceStatus.buttons_count === 0) return;
-      
-      setIsLoading(true);
-      const configs: ButtonConfig[] = [];
-      
-      try {
-        for (let i = 0; i < deviceStatus.buttons_count; i++) {
-          try {
-            const config: ButtonConfig = await invoke('read_button_config', { buttonId: i });
-            configs.push(config);
-          } catch (err) {
-            console.error(`Failed to load button ${i} config:`, err);
-            // Create a default config if loading fails
-            configs.push({
-              id: i,
-              name: `Button ${i + 1}`,
-              function: 'normal',
-              enabled: true,
-            });
-          }
-        }
-        setButtonConfigs(configs);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  // Use provided configs or local state
+  const configs = buttonConfigs || localButtonConfigs;
 
-    loadButtonConfigurations();
-  }, [deviceStatus]);
+  // Initialize default configurations when device status changes (only if no configs provided)
+  useEffect(() => {
+    if (buttonConfigs) return; // Use provided configs
+    
+    if (!deviceStatus || deviceStatus.buttons_count === 0 || isConnected === false) {
+      setLocalButtonConfigs([]);
+      return;
+    }
+    
+    // Create default configurations without loading from device
+    const defaultConfigs: ButtonConfig[] = [];
+    for (let i = 0; i < deviceStatus.buttons_count; i++) {
+      defaultConfigs.push({
+        id: i,
+        name: `Button ${i + 1}`,
+        function: 'normal',
+        enabled: true,
+      });
+    }
+    setLocalButtonConfigs(defaultConfigs);
+  }, [deviceStatus, isConnected, buttonConfigs]);
+
+  // Clear configurations when disconnected
+  useEffect(() => {
+    if (isConnected === false) {
+      setLocalButtonConfigs([]);
+      setIsLoading(false);
+    }
+  }, [isConnected]);
 
   const updateButtonConfig = async (buttonId: number, updates: Partial<ButtonConfig>) => {
-    const currentConfig = buttonConfigs.find(c => c.id === buttonId);
+    if (isConnected === false) return;
+    
+    const currentConfig = configs.find(c => c.id === buttonId);
     if (!currentConfig) return;
 
     const updatedConfig = { ...currentConfig, ...updates };
     
     try {
       await invoke('write_button_config', { config: updatedConfig });
-      setButtonConfigs(prev => prev.map(c => c.id === buttonId ? updatedConfig : c));
+      
+      if (buttonConfigs && onConfigUpdate) {
+        // Using provided configs - notify parent
+        const updatedConfigs = configs.map(c => c.id === buttonId ? updatedConfig : c);
+        onConfigUpdate(updatedConfigs);
+      } else {
+        // Using local state
+        setLocalButtonConfigs(prev => prev.map(c => c.id === buttonId ? updatedConfig : c));
+      }
     } catch (err) {
       console.error('Failed to update button config:', err);
     }
@@ -133,7 +146,7 @@ export function ButtonConfiguration({ deviceStatus }: ButtonConfigurationProps) 
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {buttonConfigs.map((button) => (
+          {configs.map((button) => (
             <Card key={button.id} className="p-4">
               <div className="space-y-4">
                 {/* Button Header */}
@@ -232,7 +245,7 @@ export function ButtonConfiguration({ deviceStatus }: ButtonConfigurationProps) 
               variant="outline" 
               size="sm"
               onClick={() => {
-                buttonConfigs.forEach(button => {
+                configs.forEach(button => {
                   updateButtonConfig(button.id, { enabled: true });
                 });
               }}
@@ -243,7 +256,7 @@ export function ButtonConfiguration({ deviceStatus }: ButtonConfigurationProps) 
               variant="outline" 
               size="sm"
               onClick={() => {
-                buttonConfigs.forEach(button => {
+                configs.forEach(button => {
                   updateButtonConfig(button.id, { enabled: false });
                 });
               }}
@@ -254,7 +267,7 @@ export function ButtonConfiguration({ deviceStatus }: ButtonConfigurationProps) 
               variant="outline" 
               size="sm"
               onClick={() => {
-                buttonConfigs.forEach(button => {
+                configs.forEach(button => {
                   updateButtonConfig(button.id, { 
                     function: 'normal',
                     enabled: true,

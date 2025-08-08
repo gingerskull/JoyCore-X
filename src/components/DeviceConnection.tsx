@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-import { useDevice } from '@/hooks/useDevice';
+import { useDeviceContext } from '@/contexts/DeviceContext';
 import type { Device } from '@/lib/types';
 
 export function DeviceConnection() {
@@ -21,7 +21,7 @@ export function DeviceConnection() {
     discoverDevices,
     isConnected,
     isConnecting
-  } = useDevice();
+  } = useDeviceContext();
 
   const [connectingToId, setConnectingToId] = useState<string | null>(null);
 

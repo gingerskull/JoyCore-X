@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 
-import { useDevice } from '@/hooks/useDevice';
+import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceConnection } from './DeviceConnection';
 import { ConfigurationTabs } from './ConfigurationTabs';
 
@@ -24,7 +24,7 @@ export function Dashboard() {
     isConnected,
     hasError,
     clearError
-  } = useDevice();
+  } = useDeviceContext();
 
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
@@ -33,17 +33,20 @@ export function Dashboard() {
     discoverDevices();
   }, [discoverDevices]);
 
-  // Refresh devices periodically
+  // Refresh devices periodically (only when not connected)
   useEffect(() => {
+    // Don't auto-refresh if already connected
+    if (isConnected) return;
+
     const interval = setInterval(async () => {
-      if (!isLoading) {
+      if (!isLoading && !isConnected) {
         await refreshDevices();
         setLastRefresh(new Date());
       }
     }, 5000); // Refresh every 5 seconds
 
     return () => clearInterval(interval);
-  }, [refreshDevices, isLoading]);
+  }, [refreshDevices, isLoading, isConnected]);
 
   const handleRefresh = async () => {
     clearError();

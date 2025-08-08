@@ -15,65 +15,78 @@ import type { DeviceStatus, AxisConfig } from '@/lib/types';
 
 interface AxisConfigurationProps {
   deviceStatus: DeviceStatus | null;
+  isConnected?: boolean;
+  axisConfigs?: AxisConfig[];
+  onConfigUpdate?: (configs: AxisConfig[]) => void;
 }
 
-export function AxisConfiguration({ deviceStatus }: AxisConfigurationProps) {
-  const [axisConfigs, setAxisConfigs] = useState<AxisConfig[]>([]);
+export function AxisConfiguration({ deviceStatus, isConnected = false, axisConfigs, onConfigUpdate }: AxisConfigurationProps) {
+  const [localAxisConfigs, setLocalAxisConfigs] = useState<AxisConfig[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedAxis, setSelectedAxis] = useState<number>(0);
 
-  // Load axis configurations
-  useEffect(() => {
-    const loadAxisConfigurations = async () => {
-      if (!deviceStatus || deviceStatus.axes_count === 0) return;
-      
-      setIsLoading(true);
-      const configs: AxisConfig[] = [];
-      
-      try {
-        for (let i = 0; i < deviceStatus.axes_count; i++) {
-          try {
-            const config: AxisConfig = await invoke('read_axis_config', { axisId: i });
-            configs.push(config);
-          } catch (err) {
-            console.error(`Failed to load axis ${i} config:`, err);
-            // Create a default config if loading fails
-            configs.push({
-              id: i,
-              name: `Axis ${i + 1}`,
-              min_value: -32768,
-              max_value: 32767,
-              center_value: 0,
-              deadzone: 100,
-              curve: 'linear',
-              inverted: false,
-            });
-          }
-        }
-        setAxisConfigs(configs);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  // Use provided configs or local state
+  const configs = axisConfigs || localAxisConfigs;
 
-    loadAxisConfigurations();
-  }, [deviceStatus]);
+  // Initialize default configurations when device status changes (only if no configs provided)
+  useEffect(() => {
+    if (axisConfigs) return; // Use provided configs
+    
+    if (!deviceStatus || deviceStatus.axes_count === 0 || isConnected === false) {
+      setLocalAxisConfigs([]);
+      return;
+    }
+    
+    // Create default configurations without loading from device
+    const defaultConfigs: AxisConfig[] = [];
+    for (let i = 0; i < deviceStatus.axes_count; i++) {
+      defaultConfigs.push({
+        id: i,
+        name: `Axis ${i + 1}`,
+        min_value: -32768,
+        max_value: 32767,
+        center_value: 0,
+        deadzone: 100,
+        curve: 'linear',
+        inverted: false,
+      });
+    }
+    setLocalAxisConfigs(defaultConfigs);
+  }, [deviceStatus, isConnected, axisConfigs]);
+
+  // Clear configurations when disconnected
+  useEffect(() => {
+    if (isConnected === false) {
+      setLocalAxisConfigs([]);
+      setIsLoading(false);
+    }
+  }, [isConnected]);
 
   const updateAxisConfig = async (axisId: number, updates: Partial<AxisConfig>) => {
-    const currentConfig = axisConfigs.find(c => c.id === axisId);
+    if (isConnected === false) return;
+    
+    const currentConfig = configs.find(c => c.id === axisId);
     if (!currentConfig) return;
 
     const updatedConfig = { ...currentConfig, ...updates };
     
     try {
       await invoke('write_axis_config', { config: updatedConfig });
-      setAxisConfigs(prev => prev.map(c => c.id === axisId ? updatedConfig : c));
+      
+      if (axisConfigs && onConfigUpdate) {
+        // Using provided configs - notify parent
+        const updatedConfigs = configs.map(c => c.id === axisId ? updatedConfig : c);
+        onConfigUpdate(updatedConfigs);
+      } else {
+        // Using local state
+        setLocalAxisConfigs(prev => prev.map(c => c.id === axisId ? updatedConfig : c));
+      }
     } catch (err) {
       console.error('Failed to update axis config:', err);
     }
   };
 
-  const currentAxis = axisConfigs.find(c => c.id === selectedAxis);
+  const currentAxis = configs.find(c => c.id === selectedAxis);
 
   if (!deviceStatus) {
     return (
@@ -110,7 +123,7 @@ export function AxisConfiguration({ deviceStatus }: AxisConfigurationProps) {
           <CardTitle className="text-sm">Axis Selection</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {axisConfigs.map((axis) => (
+          {configs.map((axis) => (
             <Button
               key={axis.id}
               variant={selectedAxis === axis.id ? "default" : "outline"}

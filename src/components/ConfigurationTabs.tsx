@@ -10,19 +10,23 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 
-import { useDevice } from '@/hooks/useDevice';
+import { useDeviceContext } from '@/contexts/DeviceContext';
 import { AxisConfiguration } from './AxisConfiguration';
 import { ButtonConfiguration } from './ButtonConfiguration';
 import { ProfileManagement } from './ProfileManagement';
 import type { DeviceStatus, AxisConfig, ButtonConfig } from '@/lib/types';
 
 export function ConfigurationTabs() {
-  const { connectedDevice, getDeviceStatus } = useDevice();
+  const { connectedDevice, getDeviceStatus, isConnected } = useDeviceContext();
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  
+  // Configuration states
+  const [buttonConfigs, setButtonConfigs] = useState<ButtonConfig[]>([]);
+  const [axisConfigs, setAxisConfigs] = useState<AxisConfig[]>([]);
 
   // Load device status
   useEffect(() => {
@@ -38,7 +42,16 @@ export function ConfigurationTabs() {
     };
 
     loadDeviceStatus();
-  }, [connectedDevice, getDeviceStatus]);
+  }, [connectedDevice, getDeviceStatus, isConnected]);
+
+  // Clear loading states when disconnected
+  useEffect(() => {
+    if (isConnected === false) {
+      setIsLoading(false);
+      setIsSaving(false);
+      setError(null);
+    }
+  }, [isConnected]);
 
   const handleSaveConfiguration = async () => {
     setIsSaving(true);
@@ -57,15 +70,113 @@ export function ConfigurationTabs() {
   };
 
   const handleLoadConfiguration = async () => {
+    if (!deviceStatus) {
+      setError('No device status available');
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     
     try {
+      // First, load configuration from device storage (/config.bin)
+      console.log('Loading configuration from device...');
       await invoke('load_device_config');
-      // TODO: Show success toast and refresh configuration data
+      console.log('Device configuration loaded from storage');
+      
+      // Now read the loaded configuration data
+      // Try to read the first button config to test if communication is working
+      let communicationWorking = false;
+      if (deviceStatus.buttons_count > 0) {
+        try {
+          await invoke('read_button_config', { buttonId: 0 });
+          communicationWorking = true;
+        } catch (testErr) {
+          console.warn('Communication test failed, using defaults');
+        }
+      }
+      
+      if (communicationWorking) {
+        // If communication works, load actual configurations
+        console.log('Communication working, loading actual configurations...');
+        
+        // Load button configurations
+        const loadedButtonConfigs: ButtonConfig[] = [];
+        for (let i = 0; i < deviceStatus.buttons_count; i++) {
+          try {
+            const config: ButtonConfig = await invoke('read_button_config', { buttonId: i });
+            loadedButtonConfigs.push(config);
+          } catch (err) {
+            // If individual config fails, use default
+            loadedButtonConfigs.push({
+              id: i,
+              name: `Button ${i + 1}`,
+              function: 'normal',
+              enabled: true,
+            });
+          }
+        }
+        
+        // Load axis configurations
+        const loadedAxisConfigs: AxisConfig[] = [];
+        for (let i = 0; i < deviceStatus.axes_count; i++) {
+          try {
+            const config: AxisConfig = await invoke('read_axis_config', { axisId: i });
+            loadedAxisConfigs.push(config);
+          } catch (err) {
+            // If individual config fails, use default
+            loadedAxisConfigs.push({
+              id: i,
+              name: `Axis ${i + 1}`,
+              min_value: -32768,
+              max_value: 32767,
+              center_value: 0,
+              deadzone: 100,
+              curve: 'linear',
+              inverted: false,
+            });
+          }
+        }
+        
+        setButtonConfigs(loadedButtonConfigs);
+        setAxisConfigs(loadedAxisConfigs);
+      } else {
+        // Communication not working, just use defaults
+        console.log('Communication not working, using default configurations');
+        
+        const defaultButtonConfigs: ButtonConfig[] = [];
+        for (let i = 0; i < deviceStatus.buttons_count; i++) {
+          defaultButtonConfigs.push({
+            id: i,
+            name: `Button ${i + 1}`,
+            function: 'normal',
+            enabled: true,
+          });
+        }
+        
+        const defaultAxisConfigs: AxisConfig[] = [];
+        for (let i = 0; i < deviceStatus.axes_count; i++) {
+          defaultAxisConfigs.push({
+            id: i,
+            name: `Axis ${i + 1}`,
+            min_value: -32768,
+            max_value: 32767,
+            center_value: 0,
+            deadzone: 100,
+            curve: 'linear',
+            inverted: false,
+          });
+        }
+        
+        setButtonConfigs(defaultButtonConfigs);
+        setAxisConfigs(defaultAxisConfigs);
+      }
+      
+      console.log('Configuration loaded successfully');
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load configuration';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load configuration from device';
       setError(errorMessage);
+      console.error('Failed to load device config:', err);
     } finally {
       setIsLoading(false);
     }
@@ -195,11 +306,21 @@ export function ConfigurationTabs() {
         </TabsList>
 
         <TabsContent value="axes" className="space-y-4">
-          <AxisConfiguration deviceStatus={deviceStatus} />
+          <AxisConfiguration 
+            deviceStatus={deviceStatus} 
+            isConnected={isConnected} 
+            axisConfigs={axisConfigs}
+            onConfigUpdate={setAxisConfigs}
+          />
         </TabsContent>
 
         <TabsContent value="buttons" className="space-y-4">
-          <ButtonConfiguration deviceStatus={deviceStatus} />
+          <ButtonConfiguration 
+            deviceStatus={deviceStatus} 
+            isConnected={isConnected} 
+            buttonConfigs={buttonConfigs}
+            onConfigUpdate={setButtonConfigs}
+          />
         </TabsContent>
 
         <TabsContent value="profiles" className="space-y-4">

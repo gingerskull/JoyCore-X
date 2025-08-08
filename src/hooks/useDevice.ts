@@ -65,6 +65,7 @@ export function useDevice() {
     setError(null);
     
     try {
+      console.log('Attempting to connect to device:', deviceId);
       await invoke('connect_device', { deviceId });
       
       // Update connection info
@@ -81,12 +82,14 @@ export function useDevice() {
       const connected: Device | null = await invoke('get_connected_device');
       if (connected) {
         setConnectedDevice(connected);
-        setConnectionInfo(parseConnectionState(connected));
+        const connectionState = parseConnectionState(connected);
+        setConnectionInfo(connectionState);
       }
       
       return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect to device';
+      console.error('Connection error:', err);
       setError(errorMessage);
       setConnectionInfo({ status: 'error', error: errorMessage });
       return false;
@@ -130,7 +133,7 @@ export function useDevice() {
     }
   }, []);
 
-  // Initialize - check for connected device and refresh devices
+  // Initialize - check for connected device and get devices (run only once on mount)
   useEffect(() => {
     const initialize = async () => {
       setIsLoading(true);
@@ -144,16 +147,20 @@ export function useDevice() {
         }
         
         // Get all devices
-        await refreshDevices();
+        const allDevices: Device[] = await invoke('get_devices');
+        setDevices(allDevices);
       } catch (err) {
         console.error('Failed to initialize device hook:', err);
+        setError('Failed to initialize device connection');
       } finally {
         setIsLoading(false);
       }
     };
 
     initialize();
-  }, [refreshDevices]);
+  }, []); // Empty dependency array - only run once on mount
+
+  const isConnected = connectionInfo.status === 'connected';
 
   return {
     // State
@@ -171,7 +178,7 @@ export function useDevice() {
     getDeviceStatus,
     
     // Computed
-    isConnected: connectionInfo.status === 'connected',
+    isConnected,
     isConnecting: connectionInfo.status === 'connecting',
     hasError: connectionInfo.status === 'error' || error !== null,
     
