@@ -96,17 +96,21 @@ impl DeviceManager {
 
         // Attempt connection
         let mut serial_interface = SerialInterface::new();
+        log::info!("Attempting to connect to port: {}", device.port_name);
         match serial_interface.connect(&device.port_name) {
             Ok(()) => {
+                log::info!("Serial connection successful, initializing protocol");
                 // Create protocol handler
                 let mut protocol = ConfigProtocol::new(serial_interface);
                 
                 // Initialize protocol
                 match protocol.init().await {
                     Ok(()) => {
+                        log::info!("Protocol initialization successful, getting device status");
                         // Get device status
                         match protocol.get_device_status().await {
                             Ok(status) => {
+                                log::info!("Device status retrieved successfully: {:?}", status);
                                 // Update device with status info
                                 self.update_device_status(device_id, status).await;
                                 self.update_device_connection_state(device_id, ConnectionState::Connected).await;
@@ -122,6 +126,7 @@ impl DeviceManager {
                             }
                             Err(e) => {
                                 let error_msg = format!("Failed to get device status: {}", e);
+                                log::error!("{}", error_msg);
                                 self.update_device_connection_state(device_id, ConnectionState::Error(error_msg.clone())).await;
                                 Err(DeviceError::SerialError(e))
                             }
@@ -129,6 +134,7 @@ impl DeviceManager {
                     }
                     Err(e) => {
                         let error_msg = format!("Protocol initialization failed: {}", e);
+                        log::error!("{}", error_msg);
                         self.update_device_connection_state(device_id, ConnectionState::Error(error_msg)).await;
                         Err(DeviceError::SerialError(e))
                     }
@@ -136,6 +142,7 @@ impl DeviceManager {
             }
             Err(e) => {
                 let error_msg = format!("Connection failed: {}", e);
+                log::error!("{}", error_msg);
                 self.update_device_connection_state(device_id, ConnectionState::Error(error_msg)).await;
                 Err(DeviceError::SerialError(e))
             }

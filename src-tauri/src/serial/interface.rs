@@ -164,13 +164,15 @@ impl SerialInterface {
 
     /// Send a command and wait for response
     pub async fn send_command(&mut self, command: &str) -> Result<String> {
+        log::debug!("Sending command: {}", command);
         let command_with_newline = format!("{}\n", command);
         self.send_data(command_with_newline.as_bytes()).await?;
 
         let mut buffer = [0u8; 1024];
-        let bytes_read = self.read_data(&mut buffer, 2000).await?;
+        let bytes_read = self.read_data(&mut buffer, 5000).await?; // Increased timeout to 5 seconds
         
         let response = String::from_utf8_lossy(&buffer[..bytes_read]).trim().to_string();
+        log::debug!("Received response: {}", response);
         Ok(response)
     }
 }
