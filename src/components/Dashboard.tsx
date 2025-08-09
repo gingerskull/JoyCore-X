@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Settings, Gamepad2, Usb, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { RefreshCw, Gamepad2, AlertCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
-import { DeviceConnection } from './DeviceConnection';
+import { DeviceList } from './DeviceList';
 import { ConfigurationTabs } from './ConfigurationTabs';
 
 export function Dashboard() {
@@ -54,30 +52,6 @@ export function Dashboard() {
     setLastRefresh(new Date());
   };
 
-  const getConnectionStatusBadge = () => {
-    switch (connectionInfo.status) {
-      case 'connected':
-        return <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-          <CheckCircle2 className="w-3 h-3 mr-1" />
-          Connected
-        </Badge>;
-      case 'connecting':
-        return <Badge variant="secondary">
-          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-          Connecting
-        </Badge>;
-      case 'error':
-        return <Badge variant="destructive">
-          <AlertCircle className="w-3 h-3 mr-1" />
-          Error
-        </Badge>;
-      default:
-        return <Badge variant="outline">
-          <Usb className="w-3 h-3 mr-1" />
-          Disconnected
-        </Badge>;
-    }
-  };
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -91,8 +65,6 @@ export function Dashboard() {
           </div>
           
           <div className="ml-auto flex items-center space-x-4">
-            {getConnectionStatusBadge()}
-            
             <Button 
               variant="outline" 
               size="sm"
@@ -111,8 +83,7 @@ export function Dashboard() {
         {/* Sidebar */}
         <div className="w-80 border-r bg-muted/30">
           <div className="p-6">
-            <h2 className="text-lg font-medium mb-4">Device Connection</h2>
-            <DeviceConnection />
+            <DeviceList />
           </div>
         </div>
 

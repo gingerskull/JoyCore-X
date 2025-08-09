@@ -1,0 +1,214 @@
+import { useState } from 'react';
+import { Usb, Wifi, WifiOff, AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+
+import { useDeviceContext } from '@/contexts/DeviceContext';
+import type { Device } from '@/lib/types';
+
+export function DeviceList() {
+  const {
+    devices,
+    connectedDevice,
+    connectionInfo,
+    isLoading,
+    connectDevice,
+    disconnectDevice,
+    discoverDevices,
+    isConnected,
+    isConnecting
+  } = useDeviceContext();
+
+  const [connectingToId, setConnectingToId] = useState<string | null>(null);
+
+  const handleConnect = async (deviceId: string) => {
+    setConnectingToId(deviceId);
+    try {
+      await connectDevice(deviceId);
+    } finally {
+      setConnectingToId(null);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    await disconnectDevice();
+  };
+
+  const getDeviceStatusIcon = (device: Device, isConnected: boolean) => {
+    if (isConnected) {
+      return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+    }
+    
+    const state = device.connection_state;
+    
+    if (state === 'Connecting' || (connectingToId === device.id)) {
+      return <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />;
+    } else if (typeof state === 'object' && 'Error' in state) {
+      return <AlertTriangle className="h-4 w-4 text-red-600" />;
+    }
+    
+    return <WifiOff className="h-4 w-4 text-gray-400" />;
+  };
+
+  const getConnectionAction = (device: Device, isDeviceConnected: boolean) => {
+    const isDeviceConnecting = connectingToId === device.id || 
+      (isConnecting && connectedDevice?.id === device.id);
+
+    if (isDeviceConnected) {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleDisconnect}
+          disabled={isLoading}
+          className="w-full text-xs h-8"
+        >
+          <WifiOff className="w-3 h-3 mr-2" />
+          Disconnect
+        </Button>
+      );
+    }
+
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => handleConnect(device.id)}
+        disabled={isLoading || isDeviceConnecting || isConnected}
+        className="w-full text-xs h-8"
+      >
+        {isDeviceConnecting ? (
+          <>
+            <Loader2 className="w-3 h-3 animate-spin mr-2" />
+            Connecting...
+          </>
+        ) : (
+          <>
+            <Wifi className="w-3 h-3 mr-2" />
+            Connect
+          </>
+        )}
+      </Button>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium">Devices</CardTitle>
+          <div className="flex items-center space-x-2">
+            <Badge variant="outline" className="text-xs">
+              {devices.length} found
+            </Badge>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={discoverDevices}
+              disabled={isLoading}
+              className="h-7 w-7 p-0"
+            >
+              <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="pt-0">
+        {devices.length === 0 ? (
+          <div className="text-center py-8">
+            <Usb className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground mb-3">
+              No JoyCore devices found
+            </p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={discoverDevices}
+              disabled={isLoading}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              Scan for Devices
+            </Button>
+          </div>
+        ) : (
+          <ScrollArea className="max-h-96">
+            <div className="space-y-3">
+              {devices.map((device) => {
+                const isDeviceConnected = device.connection_state === 'Connected';
+                
+                return (
+                  <div
+                    key={device.id}
+                    className={`p-4 rounded-lg border transition-colors space-y-3 ${
+                      isDeviceConnected 
+                        ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' 
+                        : 'border-border hover:bg-muted/50'
+                    }`}
+                  >
+                    {/* Device Name Row */}
+                    <div className="flex items-center space-x-3">
+                      {getDeviceStatusIcon(device, isDeviceConnected)}
+                      <span className="font-medium text-sm flex-1">
+                        {device.product || 'JoyCore Device'}
+                      </span>
+                      {isDeviceConnected && (
+                        <Badge variant="default" className="text-xs px-2 py-0.5 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                          Active
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    {/* Port Row */}
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium">Port:</span> {device.port_name}
+                    </div>
+                    
+                    {/* Serial Number Row */}
+                    {device.serial_number && (
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-medium">Serial:</span> {device.serial_number}
+                      </div>
+                    )}
+                    
+                    {/* Firmware Row */}
+                    {device.device_status && (
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-medium">Firmware:</span> {device.device_status.firmware_version}
+                      </div>
+                    )}
+                    
+                    {/* Buttons & Axes Row */}
+                    {device.device_status && (
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-medium">Controls:</span> {device.device_status.axes_count} Axes, {device.device_status.buttons_count} Buttons
+                      </div>
+                    )}
+                    
+                    {/* Connection Button Row */}
+                    <div className="pt-1">
+                      {getConnectionAction(device, isDeviceConnected)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        )}
+        
+        {devices.length > 0 && (
+          <>
+            <Separator className="my-3" />
+            <div className="text-xs text-muted-foreground">
+              Connect your device via USB and ensure it's in configuration mode.
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
