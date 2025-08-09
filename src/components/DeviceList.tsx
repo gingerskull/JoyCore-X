@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Usb, Wifi, WifiOff, AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { Usb, Wifi, WifiOff, AlertTriangle, CheckCircle2, Loader2, RefreshCw, PanelLeftClose } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +10,14 @@ import { Separator } from '@/components/ui/separator';
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import type { Device } from '@/lib/types';
 
-export function DeviceList() {
+interface DeviceListProps {
+  onCollapse: () => void;
+  deviceCount: number;
+  onRefresh: () => void;
+  isLoading: boolean;
+}
+
+export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRefreshing }: DeviceListProps) {
   const {
     devices,
     connectedDevice,
@@ -99,22 +106,37 @@ export function DeviceList() {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium">Devices</CardTitle>
-          <div className="flex items-center space-x-2">
-            <Badge variant="outline" className="text-xs">
-              {devices.length} found
-            </Badge>
+        
+          <CardTitle className="text-lg font-semibold justify-between inline-flex">DEVICES
+<Button 
+            variant="ghost" 
+            size="icon"
+            onClick={onCollapse}
+            className="h-8 w-8"
+            title="Collapse sidebar">
+            <PanelLeftClose className="" />
+          </Button>
+
+          </CardTitle>
+          
+      
+    
+        <div className="pl-1 pr-1">
+        
+            
             <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={discoverDevices}
-              disabled={isLoading}
-              className="h-7 w-7 p-0"
-            >
-              <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
+            variant="outline" 
+            size="sm"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="w-full text-xs h-8 rou"
+            title="Refresh devices"
+          >
+            {deviceCount} found
+            <RefreshCw className={`${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
+       
+          
         </div>
       </CardHeader>
       
@@ -128,10 +150,10 @@ export function DeviceList() {
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={discoverDevices}
-              disabled={isLoading}
+              onClick={onRefresh}
+              disabled={isRefreshing}
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
               Scan for Devices
             </Button>
           </div>

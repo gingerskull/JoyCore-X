@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Gamepad2, AlertCircle } from 'lucide-react';
+import { RefreshCw, Gamepad2, AlertCircle, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceList } from './DeviceList';
+import { CollapsedSidebar } from './CollapsedSidebar';
 import { ConfigurationTabs } from './ConfigurationTabs';
 
 export function Dashboard() {
@@ -25,6 +27,11 @@ export function Dashboard() {
   } = useDeviceContext();
 
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    // Load saved preference from localStorage
+    const saved = localStorage.getItem('joycore-sidebar-collapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
 
   // Auto-discover devices on mount
   useEffect(() => {
@@ -46,10 +53,29 @@ export function Dashboard() {
     return () => clearInterval(interval);
   }, [refreshDevices, isLoading, isConnected]);
 
+  // Keyboard shortcut for sidebar toggle (Ctrl+B)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === 'b') {
+        event.preventDefault();
+        toggleSidebar();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [sidebarCollapsed]);
+
   const handleRefresh = async () => {
     clearError();
     await discoverDevices();
     setLastRefresh(new Date());
+  };
+
+  const toggleSidebar = () => {
+    const newState = !sidebarCollapsed;
+    setSidebarCollapsed(newState);
+    localStorage.setItem('joycore-sidebar-collapsed', JSON.stringify(newState));
   };
 
 
@@ -81,10 +107,19 @@ export function Dashboard() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <div className="w-80 border-r bg-muted/30">
-          <div className="p-6">
-            <DeviceList />
-          </div>
+        <div className={`${sidebarCollapsed ? 'w-20' : 'w-80'} border-r bg-muted/30 transition-all duration-300 ease-in-out`}>
+          {sidebarCollapsed ? (
+            <CollapsedSidebar onExpand={() => setSidebarCollapsed(false)} />
+          ) : (
+            <div className="p-3">
+              <DeviceList 
+                onCollapse={() => setSidebarCollapsed(true)}
+                deviceCount={devices.length}
+                onRefresh={handleRefresh}
+                isLoading={isLoading}
+              />
+            </div>
+          )}
         </div>
 
         {/* Main Panel */}
