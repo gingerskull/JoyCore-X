@@ -12,7 +12,8 @@ interface DeviceContextType {
   
   // Actions
   discoverDevices: () => Promise<Device[]>;
-  refreshDevices: () => Promise<Device[]>;
+  refreshDevices: (withCleanup?: boolean) => Promise<Device[]>;
+  refreshDevicesSilently: (withCleanup?: boolean) => Promise<Device[]>;
   connectDevice: (deviceId: string) => Promise<boolean>;
   disconnectDevice: () => Promise<boolean>;
   getDeviceStatus: () => Promise<DeviceStatus | null>;

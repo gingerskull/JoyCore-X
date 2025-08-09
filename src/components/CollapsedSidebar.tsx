@@ -17,6 +17,7 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
     connectedDevice,
     isLoading,
     connectDevice,
+    disconnectDevice,
     isConnected,
     isConnecting
   } = useDeviceContext();
@@ -47,13 +48,19 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
   };
 
   const handleDeviceClick = async (device: Device) => {
-    if (device.connection_state === 'Connected') return;
+    const isDeviceConnected = device.connection_state === 'Connected';
     
-    setConnectingToId(device.id);
-    try {
-      await connectDevice(device.id);
-    } finally {
-      setConnectingToId(null);
+    if (isDeviceConnected) {
+      // Disconnect the connected device
+      await disconnectDevice();
+    } else {
+      // Connect to the device
+      setConnectingToId(device.id);
+      try {
+        await connectDevice(device.id);
+      } finally {
+        setConnectingToId(null);
+      }
     }
   };
 
@@ -85,7 +92,7 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
             variant="ghost"
             size="sm"
             onClick={onExpand}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 cursor-pointer"
             title="Expand device panel"
           >
             <PanelLeft className="w-4 h-4" />
@@ -94,7 +101,7 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
 
         {/* Device Count Section */}
         <div className="flex flex-col items-center space-y-1">
-          <Badge variant="outline" className="rounded-sm w-7 h-5 text-xs px-2 py-0.5 text-center">
+          <Badge variant="outline" className="rounded-sm w-8 h-8 text-xs px-2 py-0.5 text-center">
             {devices.length}
           </Badge>
           
@@ -125,13 +132,12 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
                 {/* Device Status Pill */}
                 <button
                   onClick={() => handleDeviceClick(device)}
-                  disabled={isDeviceConnected || isLoading}
+                  disabled={isDeviceConnecting || isLoading}
                   className={`
-                    w-7 h-5 rounded-sm flex items-center justify-center 
-                    transition-all duration-200 shadow-md cursor-pointer
+                    w-8 h-8 rounded-sm flex items-center justify-center 
+                    transition-all duration-200 cursor-pointer
                     ${getDeviceStatusColor(device)}
-                    ${isDeviceConnected ? 'shadow-lg shadow-green-500/30' : ''}
-                    ${!isDeviceConnected && !isDeviceConnecting ? 'hover:scale-110' : ''}
+                    ${!isDeviceConnecting && !isLoading ? 'hover:scale-110' : ''}
                   `}
                 >
                   {getDeviceStatusIcon(device)}
@@ -152,7 +158,7 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
                         isDeviceConnected ? 'text-green-600' :
                         isDeviceConnecting ? 'text-blue-600' : 'text-muted-foreground'
                       }`}>
-                        {isDeviceConnected ? 'Connected' :
+                        {isDeviceConnected ? 'Click to disconnect' :
                          isDeviceConnecting ? 'Connecting...' : 'Click to connect'}
                       </div>
                     </div>

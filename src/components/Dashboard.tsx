@@ -21,6 +21,7 @@ export function Dashboard() {
     error,
     discoverDevices,
     refreshDevices,
+    refreshDevicesSilently,
     isConnected,
     hasError,
     clearError
@@ -38,20 +39,17 @@ export function Dashboard() {
     discoverDevices();
   }, [discoverDevices]);
 
-  // Refresh devices periodically (only when not connected)
+  // Refresh devices periodically (silent background refresh)
   useEffect(() => {
-    // Don't auto-refresh if already connected
-    if (isConnected) return;
-
     const interval = setInterval(async () => {
-      if (!isLoading && !isConnected) {
-        await refreshDevices();
-        setLastRefresh(new Date());
-      }
-    }, 5000); // Refresh every 5 seconds
+      // Always use cleanup to detect physical disconnections for all device states
+      // Use silent refresh to avoid loading UI flicker
+      await refreshDevicesSilently(true);
+      setLastRefresh(new Date());
+    }, isConnected ? 3000 : 2000); // 3s when connected, 2s when disconnected for faster updates
 
     return () => clearInterval(interval);
-  }, [refreshDevices, isLoading, isConnected]);
+  }, [refreshDevicesSilently, isConnected]);
 
   // Keyboard shortcut for sidebar toggle (Ctrl+B)
   useEffect(() => {
@@ -68,7 +66,9 @@ export function Dashboard() {
 
   const handleRefresh = async () => {
     clearError();
-    await discoverDevices();
+    // For manual refresh, only use cleanup if we're not connected
+    // This prevents falsely disconnecting active connections
+    await refreshDevices(!isConnected); 
     setLastRefresh(new Date());
   };
 
@@ -124,7 +124,7 @@ export function Dashboard() {
 
         {/* Main Panel */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-6 flex-1">
+          <div className="p-3BT flex-1">
             {/* Error Alert */}
             {hasError && (error || connectionInfo.error) && (
               <Alert variant="destructive" className="mb-6">

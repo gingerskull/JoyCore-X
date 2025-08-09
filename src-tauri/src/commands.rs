@@ -24,6 +24,18 @@ pub async fn get_devices(
     Ok(device_manager.get_devices().await)
 }
 
+/// Clean up devices that are no longer present
+#[tauri::command]
+pub async fn cleanup_disconnected_devices(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Vec<String>, String> {
+    device_manager
+        .cleanup_disconnected_devices()
+        .await
+        .map(|uuids| uuids.into_iter().map(|uuid| uuid.to_string()).collect())
+        .map_err(|e| format!("Failed to cleanup disconnected devices: {}", e))
+}
+
 /// Connect to a specific device
 #[tauri::command]
 pub async fn connect_device(

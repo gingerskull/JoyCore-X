@@ -28,6 +28,25 @@ export function useDevice() {
     return { status: 'disconnected', device };
   };
 
+  // Helper to deep compare device arrays
+  const devicesEqual = (a: Device[], b: Device[]): boolean => {
+    if (a.length !== b.length) return false;
+    
+    // Sort both arrays by ID to ensure consistent comparison
+    const sortedA = [...a].sort((x, y) => x.id.localeCompare(y.id));
+    const sortedB = [...b].sort((x, y) => x.id.localeCompare(y.id));
+    
+    return sortedA.every((deviceA, index) => {
+      const deviceB = sortedB[index];
+      return (
+        deviceA.id === deviceB.id &&
+        deviceA.port_name === deviceB.port_name &&
+        deviceA.connection_state === deviceB.connection_state &&
+        JSON.stringify(deviceA.device_status) === JSON.stringify(deviceB.device_status)
+      );
+    });
+  };
+
   // Discover available devices
   const discoverDevices = useCallback(async () => {
     setIsLoading(true);
@@ -46,18 +65,88 @@ export function useDevice() {
     }
   }, []);
 
-  // Get all known devices
-  const refreshDevices = useCallback(async () => {
+  // Get all known devices with optional cleanup
+  const refreshDevices = useCallback(async (withCleanup = false) => {
+    setIsLoading(true);
     try {
+      if (withCleanup) {
+        // Run cleanup to remove physically disconnected devices
+        await invoke('cleanup_disconnected_devices');
+        // Then discover to add any new devices
+        await invoke('discover_devices');
+      } else {
+        // Just refresh discovery without aggressive cleanup
+        await invoke('discover_devices');
+      }
+      
+      // Get the updated device list
       const allDevices: Device[] = await invoke('get_devices');
       setDevices(allDevices);
+      
+      // Check if connected device is still actually connected
+      if (connectedDevice) {
+        const stillConnected = allDevices.find(d => 
+          d.id === connectedDevice.id && d.connection_state === 'Connected'
+        );
+        if (!stillConnected) {
+          // Device was physically disconnected
+          console.log('Connected device was physically disconnected, updating state');
+          setConnectedDevice(null);
+          setConnectionInfo({ status: 'disconnected' });
+        }
+      }
+      
       return allDevices;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to get devices';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh devices';
       setError(errorMessage);
       return [];
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  }, [connectedDevice]);
+
+  // Silent refresh for background polling (no loading UI changes)
+  const refreshDevicesSilently = useCallback(async (withCleanup = false) => {
+    try {
+      if (withCleanup) {
+        // Run cleanup to remove physically disconnected devices
+        await invoke('cleanup_disconnected_devices');
+        // Then discover to add any new devices
+        await invoke('discover_devices');
+      } else {
+        // Just refresh discovery without aggressive cleanup
+        await invoke('discover_devices');
+      }
+      
+      // Get the updated device list
+      const allDevices: Device[] = await invoke('get_devices');
+      
+      // Only update state if devices actually changed
+      if (!devicesEqual(devices, allDevices)) {
+        setDevices(allDevices);
+      }
+      
+      // Check if connected device is still actually connected
+      if (connectedDevice) {
+        const stillConnected = allDevices.find(d => 
+          d.id === connectedDevice.id && d.connection_state === 'Connected'
+        );
+        if (!stillConnected) {
+          // Device was physically disconnected
+          console.log('Connected device was physically disconnected, updating state');
+          setConnectedDevice(null);
+          setConnectionInfo({ status: 'disconnected' });
+        }
+      }
+      
+      return allDevices;
+    } catch (err) {
+      // Silent errors - log but don't show in UI
+      console.error('Silent device refresh failed:', err);
+      return devices; // Return current devices on error
+    }
+  }, [connectedDevice, devices, devicesEqual]);
 
   // Connect to a device
   const connectDevice = useCallback(async (deviceId: string) => {
@@ -173,6 +262,7 @@ export function useDevice() {
     // Actions
     discoverDevices,
     refreshDevices,
+    refreshDevicesSilently,
     connectDevice,
     disconnectDevice,
     getDeviceStatus,

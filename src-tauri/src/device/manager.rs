@@ -42,13 +42,14 @@ impl DeviceManager {
                 .map(|d| d.id);
             
             if let Some(existing_id) = existing_device_id {
-                // Update existing device info
+                // Update existing device info but preserve current connection state
                 let existing = devices_guard.get(&existing_id).unwrap().clone();
                 let mut updated_device = existing;
                 updated_device.serial_number = serial_info.serial_number;
                 updated_device.manufacturer = serial_info.manufacturer;
                 updated_device.product = serial_info.product;
                 updated_device.last_seen = chrono::Utc::now();
+                // Keep existing connection state - don't reset to Disconnected
                 
                 devices_guard.insert(existing_id, updated_device.clone());
                 discovered_devices.push(updated_device);
@@ -60,6 +61,93 @@ impl DeviceManager {
         }
 
         Ok(discovered_devices)
+    }
+
+    /// Clean up devices that are no longer present (separate from discovery)
+    pub async fn cleanup_disconnected_devices(&self) -> Result<Vec<Uuid>> {
+        let serial_devices = SerialInterface::discover_devices()
+            .map_err(DeviceError::SerialError)?;
+
+        let mut devices_guard = self.devices.write().await;
+        
+        // Get list of currently found port names
+        let found_ports: std::collections::HashSet<String> = serial_devices.iter()
+            .map(|info| info.port_name.clone())
+            .collect();
+
+        // Remove devices that are no longer present
+        let mut devices_to_remove = Vec::new();
+        let connected_device_id = {
+            let connected_guard = self.connected_device.lock().await;
+            connected_guard.as_ref().map(|(id, _)| *id)
+        };
+        
+        for (device_id, device) in devices_guard.iter() {
+            if !found_ports.contains(&device.port_name) {
+                match device.connection_state {
+                    // For connected devices, verify the connection is still active
+                    ConnectionState::Connected => {
+                        if let Some(connected_id) = connected_device_id {
+                            if connected_id == *device_id {
+                                // Try to verify if the connection is still active by checking the protocol
+                                let mut should_disconnect = false;
+                                {
+                                    let mut connected_guard = self.connected_device.lock().await;
+                                    if let Some((_, protocol)) = &mut *connected_guard {
+                                        // Try a simple status read to verify connection is still alive
+                                        if let Err(_) = protocol.get_device_status().await {
+                                            log::info!("Connected device {} failed status check - was physically disconnected", device.port_name);
+                                            should_disconnect = true;
+                                        }
+                                    } else {
+                                        should_disconnect = true;
+                                    }
+                                }
+                                
+                                if should_disconnect {
+                                    log::info!("Connected device {} was physically disconnected", device.port_name);
+                                    // Clear the connected device immediately
+                                    let mut connected_guard = self.connected_device.lock().await;
+                                    *connected_guard = None;
+                                    // Mark device for removal
+                                    devices_to_remove.push(*device_id);
+                                    continue;
+                                } else {
+                                    log::debug!("Connected device {} not found in discovery but status check successful, keeping it", device.port_name);
+                                    continue;
+                                }
+                            }
+                        }
+                        // If we get here, connected device is not the active one, remove it
+                        devices_to_remove.push(*device_id);
+                        log::info!("Marking connected device {} for removal (was physically disconnected)", device.port_name);
+                    },
+                    // Don't remove device if it's currently connecting (might be temporarily unavailable)
+                    ConnectionState::Connecting => {
+                        log::debug!("Device {} not found during cleanup but is connecting, keeping it", device.port_name);
+                        continue;
+                    },
+                    // Remove disconnected devices that are no longer present
+                    ConnectionState::Disconnected => {
+                        devices_to_remove.push(*device_id);
+                        log::info!("Marking disconnected device {} for removal (was physically disconnected)", device.port_name);
+                    },
+                    // Remove error state devices that are no longer present
+                    ConnectionState::Error(_) => {
+                        devices_to_remove.push(*device_id);
+                        log::info!("Marking error state device {} for removal (was physically disconnected)", device.port_name);
+                    },
+                }
+            }
+        }
+        
+        // Remove disconnected devices
+        for device_id in devices_to_remove.clone() {
+            devices_guard.remove(&device_id);
+            log::info!("Removed disconnected device: {:?}", device_id);
+        }
+
+        Ok(devices_to_remove)
     }
 
     /// Get all known devices
