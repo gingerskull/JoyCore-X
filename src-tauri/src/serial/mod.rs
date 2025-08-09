@@ -9,11 +9,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialDeviceInfo {
     pub port_name: String,
-    pub vid: u16,
-    pub pid: u16,
+    pub vid: u16, // Legacy field, maintained for backward compatibility
+    pub pid: u16, // Legacy field, maintained for backward compatibility
     pub serial_number: Option<String>,
     pub manufacturer: Option<String>,
     pub product: Option<String>,
+    pub firmware_version: Option<String>,
+    pub device_signature: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]

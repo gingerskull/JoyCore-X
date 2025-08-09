@@ -82,6 +82,11 @@ impl ConfigProtocol {
 
     /// Get device status and capabilities using actual JoyCore-FW protocol
     pub async fn get_device_status(&mut self) -> Result<DeviceStatus> {
+        // Get firmware version from device info if available
+        let firmware_version = self.interface.device_info()
+            .and_then(|info| info.firmware_version.clone())
+            .unwrap_or_else(|| "Unknown".to_string());
+
         // Use the actual STATUS command from the firmware
         let status_response = self.interface.send_command("STATUS").await?;
         
@@ -90,7 +95,7 @@ impl ConfigProtocol {
         // For now, create a basic status since we just need to verify connection
         // In the future, we could parse the actual status response format
         let status = DeviceStatus {
-            firmware_version: "JoyCore-FW".to_string(),
+            firmware_version,
             device_name: "JoyCore HOTAS Controller".to_string(),
             axes_count: 8, // JoyCore supports up to 8 axes (X,Y,Z,RX,RY,RZ,S1,S2)
             buttons_count: 64, // JoyCore supports up to 64 logical inputs
