@@ -107,7 +107,7 @@ export function Dashboard() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <div className={`${sidebarCollapsed ? 'w-20' : 'w-80'} border-r bg-muted/30 transition-all duration-300 ease-in-out`}>
+        <div className={`${sidebarCollapsed ? 'w-20' : 'w-80'} border-r transition-all duration-300 ease-in-out`}>
           {sidebarCollapsed ? (
             <CollapsedSidebar onExpand={() => setSidebarCollapsed(false)} />
           ) : (
@@ -124,7 +124,7 @@ export function Dashboard() {
 
         {/* Main Panel */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-3BT flex-1">
+          <div className="p-3 flex-1">
             {/* Error Alert */}
             {hasError && (error || connectionInfo.error) && (
               <Alert variant="destructive" className="mb-6">
