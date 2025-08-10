@@ -49,6 +49,12 @@ impl DeviceManager {
                 updated_device.manufacturer = serial_info.manufacturer;
                 updated_device.product = serial_info.product;
                 updated_device.last_seen = chrono::Utc::now();
+                // Update device status with firmware version if we have it
+                if let Some(ref fw_version) = serial_info.firmware_version {
+                    if let Some(ref mut status) = updated_device.device_status {
+                        status.firmware_version = fw_version.clone();
+                    }
+                }
                 // Keep existing connection state - don't reset to Disconnected
                 
                 devices_guard.insert(existing_id, updated_device.clone());
@@ -182,10 +188,28 @@ impl DeviceManager {
         // Update device state to connecting
         self.update_device_connection_state(device_id, ConnectionState::Connecting).await;
 
+        // Get the device info from discovery for proper connection
+        let serial_devices = SerialInterface::discover_devices()
+            .map_err(DeviceError::SerialError)?;
+        let device_info = serial_devices.iter()
+            .find(|info| info.port_name == device.port_name)
+            .cloned();
+        
         // Attempt connection
         let mut serial_interface = SerialInterface::new();
         log::info!("Attempting to connect to port: {}", device.port_name);
-        match serial_interface.connect(&device.port_name) {
+        let connection_result = match device_info {
+            Some(info) => {
+                log::info!("Using discovered device info with firmware version: {:?}", info.firmware_version);
+                serial_interface.connect_with_info(info)
+            }
+            None => {
+                log::warn!("No device info found for {}, using basic connection", device.port_name);
+                serial_interface.connect(&device.port_name)
+            }
+        };
+        
+        match connection_result {
             Ok(()) => {
                 log::info!("Serial connection successful, initializing protocol");
                 // Create protocol handler

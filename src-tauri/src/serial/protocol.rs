@@ -87,16 +87,22 @@ impl ConfigProtocol {
             .and_then(|info| info.firmware_version.clone())
             .unwrap_or_else(|| "Unknown".to_string());
 
+        // Get device name from device info
+        let device_name = self.interface.device_info()
+            .and_then(|info| info.product.clone())
+            .unwrap_or_else(|| "JoyCore HOTAS Controller".to_string());
+
         // Use the actual STATUS command from the firmware
         let status_response = self.interface.send_command("STATUS").await?;
         
         log::debug!("Raw status response: {}", status_response);
+        log::info!("Device status: firmware={}, device={}", firmware_version, device_name);
         
         // For now, create a basic status since we just need to verify connection
         // In the future, we could parse the actual status response format
         let status = DeviceStatus {
             firmware_version,
-            device_name: "JoyCore HOTAS Controller".to_string(),
+            device_name,
             axes_count: 8, // JoyCore supports up to 8 axes (X,Y,Z,RX,RY,RZ,S1,S2)
             buttons_count: 64, // JoyCore supports up to 64 logical inputs
             connected: true,

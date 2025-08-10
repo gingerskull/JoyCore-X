@@ -31,20 +31,34 @@ impl SerialInterface {
         let ports = serialport::available_ports()?;
         let mut devices = Vec::new();
 
-        for port in ports {
+        for port_info in ports {
             // Try to identify each port as a potential JoyCore device
-            match Self::identify_device(&port.port_name) {
-                Ok(Some(device_info)) => {
-                    log::info!("Found JoyCore device on port: {}", port.port_name);
+            match Self::identify_device(&port_info.port_name) {
+                Ok(Some(mut device_info)) => {
+                    // Enhance device info with USB details if available
+                    if let serialport::SerialPortType::UsbPort(usb_info) = &port_info.port_type {
+                        device_info.serial_number = usb_info.serial_number.clone();
+                        if device_info.manufacturer.is_none() {
+                            device_info.manufacturer = usb_info.manufacturer.clone();
+                        }
+                        if device_info.product.is_none() {
+                            device_info.product = usb_info.product.clone();
+                        }
+                        device_info.vid = usb_info.vid;
+                        device_info.pid = usb_info.pid;
+                    }
+                    
+                    log::info!("Found JoyCore device on port: {} (S/N: {:?})", 
+                              port_info.port_name, device_info.serial_number);
                     devices.push(device_info);
                 }
                 Ok(None) => {
                     // Not a JoyCore device, continue
-                    log::debug!("Port {} is not a JoyCore device", port.port_name);
+                    log::debug!("Port {} is not a JoyCore device", port_info.port_name);
                 }
                 Err(e) => {
                     // Connection failed, port might be in use or not available
-                    log::debug!("Failed to identify port {}: {}", port.port_name, e);
+                    log::debug!("Failed to identify port {}: {}", port_info.port_name, e);
                 }
             }
         }
@@ -60,17 +74,22 @@ impl SerialInterface {
             .open()
             .map_err(|e| SerialError::ConnectionFailed(e.to_string()))?;
 
-        // Create basic device info - we'll improve this if needed
-        // Skip re-identification during connection since discovery already verified it
-        let device_info = crate::serial::SerialDeviceInfo {
-            port_name: port_name.to_string(),
-            vid: 0, // Legacy field, not used anymore
-            pid: 0, // Legacy field, not used anymore
-            serial_number: None,
-            manufacturer: Some("JoyCore".to_string()),
-            product: Some("HOTAS Controller".to_string()),
-            firmware_version: Some("JoyCore-FW".to_string()),
-            device_signature: Some(DEVICE_SIGNATURE.to_string()),
+        // Re-identify device to get fresh firmware version
+        let device_info = match Self::identify_device(port_name)? {
+            Some(info) => info,
+            None => {
+                // Fallback to basic device info if identification fails
+                crate::serial::SerialDeviceInfo {
+                    port_name: port_name.to_string(),
+                    vid: 0, // Legacy field, not used anymore
+                    pid: 0, // Legacy field, not used anymore
+                    serial_number: None,
+                    manufacturer: Some("JoyCore".to_string()),
+                    product: Some("HOTAS Controller".to_string()),
+                    firmware_version: Some("JoyCore-FW".to_string()),
+                    device_signature: Some(DEVICE_SIGNATURE.to_string()),
+                }
+            }
         };
 
         self.port = Some(port);
