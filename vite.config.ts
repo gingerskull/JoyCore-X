@@ -11,4 +11,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      external: [
+        '@tauri-apps/api/core',
+        '@tauri-apps/api/event'
+      ]
+    }
+  }
 })
