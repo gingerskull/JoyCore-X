@@ -2,6 +2,7 @@ pub mod serial;
 pub mod device;
 pub mod commands;
 pub mod update;
+pub mod config;
 
 use std::sync::Arc;
 use device::DeviceManager;
@@ -36,6 +37,20 @@ pub fn run() {
       commands::download_firmware_update,
       commands::get_available_firmware_versions,
       commands::verify_firmware,
+      // Binary config commands
+      commands::read_device_config_raw,
+      commands::write_device_config_raw,
+      commands::delete_device_config,
+      commands::reset_device_to_defaults,
+      commands::format_device_storage,
+      commands::get_device_storage_info,
+      commands::list_device_files,
+      commands::read_device_file,
+      commands::write_device_file,
+      commands::delete_device_file,
+      // Parsed config commands
+      commands::test_list_device_files,
+      commands::read_parsed_device_config,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

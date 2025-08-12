@@ -75,3 +75,58 @@ export interface ConnectionInfo {
   device?: Device;
   error?: string;
 }
+
+// Binary configuration types
+export interface StorageInfo {
+  used_bytes: number;
+  total_bytes: number;
+  available_bytes: number;
+  file_count: number;
+  max_files: number;
+}
+
+export interface BinaryConfigHeader {
+  magic: number;
+  version: number;
+  size: number;
+  checksum: number;
+}
+
+export interface StoredAxisConfig {
+  enabled: number;
+  pin: number;
+  min_value: number;
+  max_value: number;
+  filter_level: number;
+  ewma_alpha: number;
+  deadband: number;
+  curve: number;
+}
+
+export interface BinaryConfig {
+  header: BinaryConfigHeader;
+  axes: StoredAxisConfig[];
+  pin_map_count: number;
+  logical_input_count: number;
+  shift_reg_count: number;
+  // Variable sections would be parsed separately
+}
+
+// Real configuration from parsed binary data
+export interface ParsedAxisConfig {
+  id: number;
+  name: string;
+  min_value: number;
+  max_value: number;
+  center_value: number;
+  deadzone: number;
+  curve: string;
+  inverted: boolean;
+}
+
+export interface ParsedButtonConfig {
+  id: number;
+  name: string;
+  function: string;
+  enabled: boolean;
+}

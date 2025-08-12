@@ -10,7 +10,7 @@ pub const MAGIC_NUMBER: u32 = 0x4A4F5943; // "JOYC" in hex
 pub const IDENTIFY_COMMAND: &str = "IDENTIFY";
 pub const IDENTIFY_RESPONSE_PREFIX: &str = "JOYCORE_ID";
 pub const BAUD_RATE: u32 = 115200;
-pub const IDENTIFY_TIMEOUT_MS: u64 = 1000;
+pub const IDENTIFY_TIMEOUT_MS: u64 = 500;
 pub const PORT_OPEN_DELAY_MS: u64 = 100;
 
 pub struct SerialInterface {
@@ -70,7 +70,7 @@ impl SerialInterface {
     pub fn connect(&mut self, port_name: &str) -> Result<()> {
         // Open the port for persistent connection
         let port = serialport::new(port_name, BAUD_RATE)
-            .timeout(Duration::from_millis(1000))
+            .timeout(Duration::from_millis(500))
             .open()
             .map_err(|e| SerialError::ConnectionFailed(e.to_string()))?;
 
@@ -102,7 +102,7 @@ impl SerialInterface {
     /// Connect to a specific device with known device info
     pub fn connect_with_info(&mut self, device_info: SerialDeviceInfo) -> Result<()> {
         let port = serialport::new(&device_info.port_name, BAUD_RATE)
-            .timeout(Duration::from_millis(1000))
+            .timeout(Duration::from_millis(500))
             .open()
             .map_err(|e| SerialError::ConnectionFailed(e.to_string()))?;
 
@@ -195,12 +195,67 @@ impl SerialInterface {
         let command_with_newline = format!("{}\n", command);
         self.send_data(command_with_newline.as_bytes()).await?;
 
-        let mut buffer = [0u8; 1024];
-        let bytes_read = self.read_data(&mut buffer, 5000).await?; // Increased timeout to 5 seconds
+        // Use larger buffer and line-by-line reading similar to Python implementation
+        let mut response_lines = Vec::new();
+        let mut accumulated_data = Vec::new();
+        let start_time = std::time::Instant::now();
+        let timeout_duration = std::time::Duration::from_secs_f32(0.5);
         
-        let response = String::from_utf8_lossy(&buffer[..bytes_read]).trim().to_string();
-        log::debug!("Received response: {}", response);
-        Ok(response)
+        // Give device a moment to start responding - reduced delay
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        
+        while start_time.elapsed() < timeout_duration {
+            let mut buffer = [0u8; 4096]; // Increased buffer size
+            
+            match timeout(std::time::Duration::from_millis(100), self.read_data(&mut buffer, 100)).await {
+                Ok(Ok(bytes_read)) => {
+                    if bytes_read > 0 {
+                        accumulated_data.extend_from_slice(&buffer[..bytes_read]);
+                        
+                        // Process complete lines
+                        while let Some(line_end) = accumulated_data.iter().position(|&b| b == b'\n' || b == b'\r') {
+                            let line_bytes = accumulated_data.drain(..=line_end).collect::<Vec<u8>>();
+                            let line = String::from_utf8_lossy(&line_bytes).trim().to_string();
+                            
+                            if !line.is_empty() {
+                                log::debug!("Received line: {}", line);
+                                response_lines.push(line.clone());
+                                
+                                // Check for termination conditions like Python script
+                                if line == "END_FILES" || line.starts_with("ERROR:") || line.starts_with("FILE_DATA:") {
+                                    log::debug!("Found termination condition: {}", line);
+                                    // For FILE_DATA, this should be the complete response
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        // No more data, wait a bit
+                        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                    }
+                }
+                Ok(Err(_)) => {
+                    // Serial read error, wait a bit
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                }
+                Err(_) => {
+                    // Timeout on this read, continue
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                }
+            }
+        }
+        
+        // Process any remaining data as a final line
+        if !accumulated_data.is_empty() {
+            let line = String::from_utf8_lossy(&accumulated_data).trim().to_string();
+            if !line.is_empty() {
+                response_lines.push(line);
+            }
+        }
+        
+        let full_response = response_lines.join("\n");
+        log::debug!("Complete response ({} lines): {}", response_lines.len(), full_response);
+        Ok(full_response)
     }
 
     /// Identify a device on the given port using IDENTIFY command

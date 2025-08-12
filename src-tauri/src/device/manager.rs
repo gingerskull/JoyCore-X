@@ -4,8 +4,9 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 use semver::Version;
 
-use crate::serial::{SerialInterface, ConfigProtocol};
+use crate::serial::{SerialInterface, ConfigProtocol, StorageInfo};
 use crate::update::{UpdateService, VersionCheckResult};
+use crate::config::BinaryConfig;
 use super::{Device, ConnectionState, ProfileManager, DeviceError, Result, FirmwareUpdateSettings};
 
 /// Central device management system
@@ -444,6 +445,151 @@ impl DeviceManager {
         }
         
         None
+    }
+
+    // Binary configuration file operations
+
+    /// Read raw binary configuration from device
+    pub async fn read_config_binary(&self) -> Result<Vec<u8>> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            let data = protocol.read_file("/config.bin").await
+                .map_err(DeviceError::SerialError)?;
+            Ok(data)
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Write raw binary configuration to device
+    pub async fn write_config_binary(&self, data: &[u8]) -> Result<()> {
+        // First validate the binary data
+        let config = BinaryConfig::from_bytes(data)
+            .map_err(|e| DeviceError::ProtocolError(format!("Invalid config data: {}", e)))?;
+        
+        // Serialize back to ensure it's valid
+        let validated_data = config.to_bytes()
+            .map_err(|e| DeviceError::ProtocolError(format!("Failed to serialize config: {}", e)))?;
+        
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            // The firmware automatically creates a backup before writing
+            protocol.write_raw_file("/config.bin", &validated_data).await
+                .map_err(DeviceError::SerialError)?;
+            log::info!("Successfully wrote binary configuration to device");
+            Ok(())
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Delete configuration file (forces regeneration on next boot)
+    pub async fn delete_config_file(&self) -> Result<()> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            protocol.delete_file("/config.bin").await
+                .map_err(DeviceError::SerialError)?;
+            log::warn!("Configuration file deleted - will regenerate on next boot");
+            Ok(())
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Reset device to factory defaults
+    pub async fn reset_device_to_defaults(&self) -> Result<()> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            protocol.reset_to_defaults().await
+                .map_err(DeviceError::SerialError)?;
+            log::info!("Device reset to factory defaults");
+            Ok(())
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Format device storage (nuclear option - deletes all files)
+    pub async fn format_device_storage(&self) -> Result<()> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            protocol.format_storage().await
+                .map_err(DeviceError::SerialError)?;
+            log::warn!("Device storage formatted - all files deleted");
+            Ok(())
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Get device storage information
+    pub async fn get_device_storage_info(&self) -> Result<StorageInfo> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            let info = protocol.get_storage_details().await
+                .map_err(DeviceError::SerialError)?;
+            Ok(info)
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// List files on device storage
+    pub async fn list_device_files(&self) -> Result<Vec<String>> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            let files = protocol.list_files().await
+                .map_err(DeviceError::SerialError)?;
+            Ok(files)
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Read any file from device storage
+    pub async fn read_device_file(&self, filename: &str) -> Result<Vec<u8>> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            let data = protocol.read_file(filename).await
+                .map_err(DeviceError::SerialError)?;
+            Ok(data)
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Write any file to device storage
+    pub async fn write_device_file(&self, filename: &str, data: &[u8]) -> Result<()> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            protocol.write_raw_file(filename, data).await
+                .map_err(DeviceError::SerialError)?;
+            Ok(())
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Delete any file from device storage
+    pub async fn delete_device_file(&self, filename: &str) -> Result<()> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = connected_guard.as_mut() {
+            protocol.delete_file(filename).await
+                .map_err(DeviceError::SerialError)?;
+            Ok(())
+        } else {
+            Err(DeviceError::NotConnected)
+        }
     }
 }
 

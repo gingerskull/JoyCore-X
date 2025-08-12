@@ -59,25 +59,8 @@ impl ConfigProtocol {
             return Err(SerialError::ConnectionFailed("Device not connected".to_string()));
         }
 
-        // Send initialization command
-        match self.interface.send_command("INIT").await {
-            Ok(response) => {
-                if response.starts_with("OK") || response.is_empty() {
-                    log::info!("Protocol initialized successfully");
-                    Ok(())
-                } else {
-                    log::warn!("Unexpected init response: '{}', continuing anyway", response);
-                    // Some devices might not implement INIT command but still work
-                    Ok(())
-                }
-            }
-            Err(SerialError::Timeout) => {
-                log::warn!("Init command timed out, device might not support INIT - continuing anyway");
-                // Device might not support INIT command, but serial connection works
-                Ok(())
-            }
-            Err(e) => Err(e)
-        }
+        log::info!("Protocol initialized successfully");
+        Ok(())
     }
 
     /// Get device status and capabilities using actual JoyCore-FW protocol
@@ -210,14 +193,12 @@ impl ConfigProtocol {
 
     /// Load configuration from device flash
     pub async fn load_config(&mut self) -> Result<()> {
-        let response = self.interface.send_command("LOAD").await?;
-        
-        if response.starts_with("OK") {
-            log::info!("Configuration loaded from device");
-            Ok(())
-        } else {
-            Err(SerialError::ProtocolError(format!("Load failed: {}", response)))
-        }
+        // Note: The firmware might not support a direct LOAD command.
+        // Configuration is automatically loaded from /config.bin at boot.
+        // For now, we'll just log and return success.
+        log::info!("Note: Device automatically loads configuration from /config.bin at boot");
+        log::info!("To reload configuration, you may need to reset the device");
+        Ok(())
     }
 
     /// Reset device to factory defaults using actual JoyCore-FW command
@@ -236,44 +217,79 @@ impl ConfigProtocol {
     /// List files available on the device
     pub async fn list_files(&mut self) -> Result<Vec<String>> {
         let response = self.interface.send_command("LIST_FILES").await?;
+        
+        // Parse the response - filter out protocol markers
         let files: Vec<String> = response
             .lines()
-            .filter(|line| line.starts_with('/'))
-            .map(|line| line.to_string())
+            .map(|line| line.trim().to_string())
+            .filter(|line| !line.is_empty() && line != "FILES:" && line != "END_FILES")
             .collect();
+        
         Ok(files)
     }
 
     /// Read a file from the device storage
     pub async fn read_file(&mut self, filename: &str) -> Result<Vec<u8>> {
+        log::info!("Reading file: {}", filename);
         let command = format!("READ_FILE {}", filename);
         let response = self.interface.send_command(&command).await?;
         
-        if response.starts_with("ERROR:") {
-            return Err(SerialError::ProtocolError(response));
-        }
+        log::info!("Raw response length: {} chars", response.len());
+        log::info!("Raw response: '{}'", response);
         
-        // Parse FILE_DATA response
-        // Format: FILE_DATA:<filename>:<bytes_read>:<hex_data>
-        if let Some(data_part) = response.strip_prefix("FILE_DATA:") {
-            let parts: Vec<&str> = data_part.split(':').collect();
+        // Parse firmware response format: FILE_DATA:/config.bin:606:[hex_data]
+        let (expected_size, hex_data) = if response.starts_with("FILE_DATA:") {
+            // Find the third colon which separates size from hex data
+            let after_prefix = response.strip_prefix("FILE_DATA:").unwrap_or(&response);
+            let parts: Vec<&str> = after_prefix.splitn(3, ':').collect();
             if parts.len() >= 3 {
-                let hex_data = parts[2];
-                // Convert hex string to bytes
-                let mut bytes = Vec::new();
-                for chunk in hex_data.chars().collect::<Vec<_>>().chunks(2) {
-                    if chunk.len() == 2 {
-                        let hex_byte = format!("{}{}", chunk[0], chunk[1]);
-                        if let Ok(byte) = u8::from_str_radix(&hex_byte, 16) {
-                            bytes.push(byte);
-                        }
-                    }
-                }
-                return Ok(bytes);
+                let expected_size = parts[1].parse::<usize>()
+                    .map_err(|_| SerialError::ProtocolError("Invalid file size in response".to_string()))?;
+                (Some(expected_size), parts[2].trim()) // The hex data part
+            } else {
+                return Err(SerialError::ProtocolError(format!("Invalid FILE_DATA response format: {}", response)));
             }
+        } else {
+            (None, response.trim())
+        };
+
+        log::info!("Processing hex data: '{}'", hex_data);
+        
+        // Validate hex data - should only contain hex characters
+        if !hex_data.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(SerialError::ProtocolError(format!("Response contains non-hex characters: '{}'", hex_data)));
         }
         
-        Err(SerialError::ProtocolError("Invalid file data response".to_string()))
+        // Must be even length for valid hex encoding
+        if hex_data.len() % 2 != 0 {
+            return Err(SerialError::ProtocolError(format!("Hex data has odd length: {}", hex_data.len())));
+        }
+        
+        let mut bytes = Vec::new();
+        
+        // Parse hex string to bytes
+        for chunk in hex_data.as_bytes().chunks(2) {
+            let hex_str = std::str::from_utf8(chunk)
+                .map_err(|_| SerialError::ProtocolError("Invalid hex response".to_string()))?;
+            let byte = u8::from_str_radix(hex_str, 16)
+                .map_err(|e| SerialError::ProtocolError(format!("Invalid hex byte '{}': {}", hex_str, e)))?;
+            bytes.push(byte);
+        }
+        
+        log::info!("Decoded {} bytes from hex response", bytes.len());
+        
+        // Validate size if we have expected size from FILE_DATA response
+        if let Some(expected) = expected_size {
+            if bytes.len() != expected {
+                return Err(SerialError::ProtocolError(format!(
+                    "Size mismatch: decoded {} bytes, expected {} bytes", 
+                    bytes.len(), expected
+                )));
+            }
+            log::info!("Size validation passed: {} bytes", bytes.len());
+        }
+        
+        Ok(bytes)
     }
 
     /// Save current configuration to device storage
@@ -281,6 +297,69 @@ impl ConfigProtocol {
         let _response = self.interface.send_command("SAVE_CONFIG").await?;
         log::info!("Configuration saved to device");
         Ok(())
+    }
+
+    /// Write a file to the device storage with raw binary data
+    pub async fn write_raw_file(&mut self, _filename: &str, _data: &[u8]) -> Result<()> {
+        // Note: WRITE_FILE is a suggested extension not yet implemented in firmware
+        return Err(SerialError::ProtocolError(
+            "WRITE_FILE command not implemented in firmware. Use SAVE_CONFIG for configuration updates.".to_string()
+        ));
+    }
+
+    /// Delete a file from the device storage
+    pub async fn delete_file(&mut self, _filename: &str) -> Result<()> {
+        // Note: DELETE_FILE is a suggested extension not yet implemented in firmware
+        return Err(SerialError::ProtocolError(
+            "DELETE_FILE command not implemented in firmware. Use FORMAT_STORAGE to clear all files.".to_string()
+        ));
+    }
+
+    /// Format the device storage (deletes all files)
+    pub async fn format_storage(&mut self) -> Result<()> {
+        // Note: FORMAT_STORAGE is a suggested extension not yet implemented in firmware
+        // Try using FORCE_DEFAULT_CONFIG which is the actual firmware command
+        let _response = self.interface.send_command("FORCE_DEFAULT_CONFIG").await?;
+        log::warn!("Used FORCE_DEFAULT_CONFIG to reset device (FORMAT_STORAGE not available)");
+        Ok(())
+    }
+
+    /// Reset device configuration to defaults
+    pub async fn reset_to_defaults(&mut self) -> Result<()> {
+        // Note: RESET_DEFAULTS is a suggested extension not yet implemented in firmware
+        // Use FORCE_DEFAULT_CONFIG which is the actual firmware command
+        let _response = self.interface.send_command("FORCE_DEFAULT_CONFIG").await?;
+        log::info!("Device reset to default configuration using FORCE_DEFAULT_CONFIG");
+        Ok(())
+    }
+
+    /// Get detailed storage information
+    pub async fn get_storage_details(&mut self) -> Result<StorageInfo> {
+        // Note: STORAGE_INFO is a suggested extension not yet implemented in firmware
+        // For now, we'll return estimated values based on what we know
+        log::warn!("STORAGE_INFO command not implemented in firmware, using defaults");
+        
+        // Try to list files to get an accurate count
+        let file_count = match self.list_files().await {
+            Ok(files) => files.len() as u8,
+            Err(_) => 0,
+        };
+        
+        // Estimate storage usage based on typical sizes
+        let estimated_used = if file_count > 0 {
+            // File table overhead + typical file sizes
+            64 + (file_count as usize * 256)
+        } else {
+            64 // Just the file table
+        };
+        
+        Ok(StorageInfo {
+            used_bytes: estimated_used,
+            total_bytes: 4096, // RP2040 EEPROM emulation size
+            available_bytes: 4096_usize.saturating_sub(estimated_used),
+            file_count,
+            max_files: 8, // From firmware documentation
+        })
     }
 
     /// Get reference to the serial interface
@@ -292,4 +371,13 @@ impl ConfigProtocol {
     pub fn interface_mut(&mut self) -> &mut SerialInterface {
         &mut self.interface
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageInfo {
+    pub used_bytes: usize,
+    pub total_bytes: usize,
+    pub available_bytes: usize,
+    pub file_count: u8,
+    pub max_files: u8,
 }

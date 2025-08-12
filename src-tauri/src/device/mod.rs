@@ -27,6 +27,9 @@ pub enum DeviceError {
     
     #[error("Update error: {0}")]
     UpdateError(String),
+    
+    #[error("Protocol error: {0}")]
+    ProtocolError(String),
 }
 
 pub type Result<T> = std::result::Result<T, DeviceError>;

@@ -2,7 +2,7 @@ pub mod interface;
 pub mod protocol;
 
 pub use interface::SerialInterface;
-pub use protocol::ConfigProtocol;
+pub use protocol::{ConfigProtocol, StorageInfo};
 
 use serde::{Deserialize, Serialize};
 

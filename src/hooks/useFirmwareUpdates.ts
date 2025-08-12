@@ -28,7 +28,7 @@ interface UseFirmwareUpdatesOptions {
 export const useFirmwareUpdates = ({
   currentVersion,
   repoOwner = 'gingerskull',
-  repoName = 'JoyCore-Firmware',
+  repoName = 'JoyCore-FW',
   autoCheck = true,
   checkInterval = 24 * 60 * 60 * 1000, // 24 hours
 }: UseFirmwareUpdatesOptions = {}) => {

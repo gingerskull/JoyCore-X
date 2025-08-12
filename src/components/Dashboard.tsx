@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { RefreshCw, Gamepad2, AlertCircle, Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,12 @@ export function Dashboard() {
     return () => clearInterval(interval);
   }, [refreshDevicesSilently, isConnected]);
 
+  const toggleSidebar = useCallback(() => {
+    const newState = !sidebarCollapsed;
+    setSidebarCollapsed(newState);
+    localStorage.setItem('joycore-sidebar-collapsed', JSON.stringify(newState));
+  }, [sidebarCollapsed]);
+
   // Keyboard shortcut for sidebar toggle (Ctrl+B)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -82,7 +88,7 @@ export function Dashboard() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [sidebarCollapsed]);
+  }, [sidebarCollapsed, toggleSidebar]);
 
   // Show update notification when update is available
   useEffect(() => {
@@ -99,12 +105,6 @@ export function Dashboard() {
     // This prevents falsely disconnecting active connections
     await refreshDevices(!isConnected); 
     setLastRefresh(new Date());
-  };
-
-  const toggleSidebar = () => {
-    const newState = !sidebarCollapsed;
-    setSidebarCollapsed(newState);
-    localStorage.setItem('joycore-sidebar-collapsed', JSON.stringify(newState));
   };
 
   const handleUpdateDialogOpen = () => {

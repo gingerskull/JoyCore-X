@@ -43,6 +43,7 @@ export function DeviceProvider({ children }: DeviceProviderProps) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useDeviceContext(): DeviceContextType {
   const context = useContext(DeviceContext);
   if (!context) {

@@ -29,7 +29,7 @@ export function useDevice() {
   };
 
   // Helper to deep compare device arrays
-  const devicesEqual = (a: Device[], b: Device[]): boolean => {
+  const devicesEqual = useCallback((a: Device[], b: Device[]): boolean => {
     if (a.length !== b.length) return false;
     
     // Sort both arrays by ID to ensure consistent comparison
@@ -45,7 +45,7 @@ export function useDevice() {
         JSON.stringify(deviceA.device_status) === JSON.stringify(deviceB.device_status)
       );
     });
-  };
+  }, []);
 
   // Discover available devices
   const discoverDevices = useCallback(async () => {

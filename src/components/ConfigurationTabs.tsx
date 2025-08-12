@@ -11,22 +11,23 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 // import { Progress } from '@/components/ui/progress';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
+import { useDeviceConfigReader } from '@/hooks/useDeviceConfigReader';
 import { AxisConfiguration } from './AxisConfiguration';
 import { ButtonConfiguration } from './ButtonConfiguration';
 import { ProfileManagement } from './ProfileManagement';
-import type { DeviceStatus, AxisConfig, ButtonConfig } from '@/lib/types';
+import { DeviceConfigManagement } from './DeviceConfigManagement';
+import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
 
 export function ConfigurationTabs() {
   const { connectedDevice, getDeviceStatus, isConnected } = useDeviceContext();
+  const { isLoading: configLoading, error: configError, readConfiguration, clearError } = useDeviceConfigReader();
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   
-  // Configuration states
-  const [buttonConfigs, setButtonConfigs] = useState<ButtonConfig[]>([]);
-  const [axisConfigs, setAxisConfigs] = useState<AxisConfig[]>([]);
+  // Real configuration states (no defaults!)
+  const [parsedAxes, setParsedAxes] = useState<ParsedAxisConfig[]>([]);
+  const [parsedButtons, setParsedButtons] = useState<ParsedButtonConfig[]>([]);
 
   // Load device status
   useEffect(() => {
@@ -47,23 +48,23 @@ export function ConfigurationTabs() {
   // Clear loading states when disconnected
   useEffect(() => {
     if (isConnected === false) {
-      setIsLoading(false);
       setIsSaving(false);
-      setError(null);
+      setParsedAxes([]);
+      setParsedButtons([]);
+      clearError();
     }
-  }, [isConnected]);
+  }, [isConnected, clearError]);
 
   const handleSaveConfiguration = async () => {
     setIsSaving(true);
-    setError(null);
+    clearError();
     
     try {
       await invoke('save_device_config');
       setLastSaved(new Date());
       // TODO: Show success toast
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to save configuration';
-      setError(errorMessage);
+      console.error('Failed to save configuration:', err);
     } finally {
       setIsSaving(false);
     }
@@ -71,131 +72,43 @@ export function ConfigurationTabs() {
 
   const handleLoadConfiguration = async () => {
     if (!deviceStatus) {
-      setError('No device status available');
       return;
     }
     
-    setIsLoading(true);
-    setError(null);
+    console.log('Reading real configuration from device config.bin...');
     
     try {
-      // First, load configuration from device storage (/config.bin)
-      console.log('Loading configuration from device...');
-      await invoke('load_device_config');
-      console.log('Device configuration loaded from storage');
-      
-      // Now read the loaded configuration data
-      // Try to read the first button config to test if communication is working
-      let communicationWorking = false;
-      if (deviceStatus.buttons_count > 0) {
-        try {
-          await invoke('read_button_config', { buttonId: 0 });
-          communicationWorking = true;
-        } catch (testErr) {
-          console.warn('Communication test failed, using defaults');
-        }
-      }
-      
-      if (communicationWorking) {
-        // If communication works, load actual configurations
-        console.log('Communication working, loading actual configurations...');
-        
-        // Load button configurations
-        const loadedButtonConfigs: ButtonConfig[] = [];
-        for (let i = 0; i < deviceStatus.buttons_count; i++) {
-          try {
-            const config: ButtonConfig = await invoke('read_button_config', { buttonId: i });
-            loadedButtonConfigs.push(config);
-          } catch (err) {
-            // If individual config fails, use default
-            loadedButtonConfigs.push({
-              id: i,
-              name: `Button ${i + 1}`,
-              function: 'normal',
-              enabled: true,
-            });
-          }
-        }
-        
-        // Load axis configurations
-        const loadedAxisConfigs: AxisConfig[] = [];
-        for (let i = 0; i < deviceStatus.axes_count; i++) {
-          try {
-            const config: AxisConfig = await invoke('read_axis_config', { axisId: i });
-            loadedAxisConfigs.push(config);
-          } catch (err) {
-            // If individual config fails, use default
-            loadedAxisConfigs.push({
-              id: i,
-              name: `Axis ${i + 1}`,
-              min_value: -32768,
-              max_value: 32767,
-              center_value: 0,
-              deadzone: 100,
-              curve: 'linear',
-              inverted: false,
-            });
-          }
-        }
-        
-        setButtonConfigs(loadedButtonConfigs);
-        setAxisConfigs(loadedAxisConfigs);
+      const config = await readConfiguration();
+      if (config) {
+        setParsedAxes(config.axes);
+        setParsedButtons(config.buttons);
+        console.log(`Loaded ${config.axes.length} axes and ${config.buttons.length} buttons from config.bin`);
       } else {
-        // Communication not working, just use defaults
-        console.log('Communication not working, using default configurations');
-        
-        const defaultButtonConfigs: ButtonConfig[] = [];
-        for (let i = 0; i < deviceStatus.buttons_count; i++) {
-          defaultButtonConfigs.push({
-            id: i,
-            name: `Button ${i + 1}`,
-            function: 'normal',
-            enabled: true,
-          });
-        }
-        
-        const defaultAxisConfigs: AxisConfig[] = [];
-        for (let i = 0; i < deviceStatus.axes_count; i++) {
-          defaultAxisConfigs.push({
-            id: i,
-            name: `Axis ${i + 1}`,
-            min_value: -32768,
-            max_value: 32767,
-            center_value: 0,
-            deadzone: 100,
-            curve: 'linear',
-            inverted: false,
-          });
-        }
-        
-        setButtonConfigs(defaultButtonConfigs);
-        setAxisConfigs(defaultAxisConfigs);
+        // Clear arrays if no config available
+        setParsedAxes([]);
+        setParsedButtons([]);
+        console.warn('No configuration could be read from device');
       }
-      
-      console.log('Configuration loaded successfully');
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load configuration from device';
-      setError(errorMessage);
-      console.error('Failed to load device config:', err);
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to read device configuration:', err);
+      // Clear arrays on error
+      setParsedAxes([]);
+      setParsedButtons([]);
     }
   };
 
   const handleFactoryReset = async () => {
     // TODO: Add confirmation dialog
-    setIsLoading(true);
-    setError(null);
+    clearError();
     
     try {
-      // This would need to be implemented in the backend
-      // await invoke('factory_reset');
-      // TODO: Show success toast and refresh configuration data
+      await invoke('reset_device_to_defaults');
+      // Clear current config and reload
+      setParsedAxes([]);
+      setParsedButtons([]);
+      await handleLoadConfiguration();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Factory reset not yet implemented';
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
+      console.error('Factory reset failed:', err);
     }
   };
 
@@ -250,17 +163,17 @@ export function ConfigurationTabs() {
                 <Button
                   variant="outline"
                   onClick={handleLoadConfiguration}
-                  disabled={isLoading}
+                  disabled={configLoading}
                   size="sm"
                 >
                   <Upload className="w-4 h-4 mr-2" />
-                  Load from Device
+                  {configLoading ? 'Reading...' : 'Load from Device'}
                 </Button>
                 
                 <Button
                   variant="outline"
                   onClick={handleFactoryReset}
-                  disabled={isLoading}
+                  disabled={configLoading}
                   size="sm"
                 >
                   <RotateCcw className="w-4 h-4 mr-2" />
@@ -275,9 +188,9 @@ export function ConfigurationTabs() {
               )}
             </div>
             
-            {error && (
+            {configError && (
               <Alert variant="destructive" className="mt-4">
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>{configError}</AlertDescription>
               </Alert>
             )}
           </CardContent>
@@ -309,8 +222,8 @@ export function ConfigurationTabs() {
           <AxisConfiguration 
             deviceStatus={deviceStatus} 
             isConnected={isConnected} 
-            axisConfigs={axisConfigs}
-            onConfigUpdate={setAxisConfigs}
+            parsedAxes={parsedAxes}
+            isLoading={configLoading}
           />
         </TabsContent>
 
@@ -318,8 +231,8 @@ export function ConfigurationTabs() {
           <ButtonConfiguration 
             deviceStatus={deviceStatus} 
             isConnected={isConnected} 
-            buttonConfigs={buttonConfigs}
-            onConfigUpdate={setButtonConfigs}
+            parsedButtons={parsedButtons}
+            isLoading={configLoading}
           />
         </TabsContent>
 
@@ -328,20 +241,7 @@ export function ConfigurationTabs() {
         </TabsContent>
 
         <TabsContent value="advanced" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Advanced Settings</CardTitle>
-              <CardDescription>
-                Advanced device configuration and diagnostics
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <Settings className="w-12 h-12 mx-auto mb-2" />
-                <p>Advanced settings coming soon...</p>
-              </div>
-            </CardContent>
-          </Card>
+          <DeviceConfigManagement />
         </TabsContent>
       </Tabs>
     </div>

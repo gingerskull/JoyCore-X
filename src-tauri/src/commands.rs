@@ -6,7 +6,9 @@ use semver::Version;
 
 use crate::device::{DeviceManager, Device, ProfileConfig, ProfileManager};
 use crate::serial::protocol::{DeviceStatus, AxisConfig, ButtonConfig};
+use crate::serial::StorageInfo;
 use crate::update::{UpdateService, VersionCheckResult};
+use crate::config::binary::{BinaryConfig, UIAxisConfig, UIButtonConfig};
 
 /// Discover available JoyCore devices
 #[tauri::command]
@@ -323,4 +325,171 @@ pub async fn verify_firmware(
         .verify_firmware(&path, expected_hash.as_deref())
         .await
         .map_err(|e| format!("Failed to verify firmware: {}", e))
+}
+
+// Binary configuration file commands
+
+/// Read raw device configuration binary
+#[tauri::command]
+pub async fn read_device_config_raw(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Vec<u8>, String> {
+    device_manager
+        .read_config_binary()
+        .await
+        .map_err(|e| format!("Failed to read config binary: {}", e))
+}
+
+/// Write raw device configuration binary
+#[tauri::command]
+pub async fn write_device_config_raw(
+    data: Vec<u8>,
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(), String> {
+    device_manager
+        .write_config_binary(&data)
+        .await
+        .map_err(|e| format!("Failed to write config binary: {}", e))
+}
+
+/// Delete device configuration file
+#[tauri::command]
+pub async fn delete_device_config(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(), String> {
+    device_manager
+        .delete_config_file()
+        .await
+        .map_err(|e| format!("Failed to delete config file: {}", e))
+}
+
+/// Reset device to factory defaults
+#[tauri::command]
+pub async fn reset_device_to_defaults(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(), String> {
+    device_manager
+        .reset_device_to_defaults()
+        .await
+        .map_err(|e| format!("Failed to reset device: {}", e))
+}
+
+/// Format device storage (deletes all files)
+#[tauri::command]
+pub async fn format_device_storage(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(), String> {
+    device_manager
+        .format_device_storage()
+        .await
+        .map_err(|e| format!("Failed to format storage: {}", e))
+}
+
+/// Get device storage information
+#[tauri::command]
+pub async fn get_device_storage_info(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<StorageInfo, String> {
+    device_manager
+        .get_device_storage_info()
+        .await
+        .map_err(|e| format!("Failed to get storage info: {}", e))
+}
+
+/// List files on device storage
+#[tauri::command]
+pub async fn list_device_files(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Vec<String>, String> {
+    device_manager
+        .list_device_files()
+        .await
+        .map_err(|e| format!("Failed to list files: {}", e))
+}
+
+/// Read any file from device storage
+#[tauri::command]
+pub async fn read_device_file(
+    filename: String,
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Vec<u8>, String> {
+    device_manager
+        .read_device_file(&filename)
+        .await
+        .map_err(|e| format!("Failed to read file: {}", e))
+}
+
+/// Write any file to device storage
+#[tauri::command]
+pub async fn write_device_file(
+    filename: String,
+    data: Vec<u8>,
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(), String> {
+    device_manager
+        .write_device_file(&filename, &data)
+        .await
+        .map_err(|e| format!("Failed to write file: {}", e))
+}
+
+/// Delete any file from device storage
+#[tauri::command]
+pub async fn delete_device_file(
+    filename: String,
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(), String> {
+    device_manager
+        .delete_device_file(&filename)
+        .await
+        .map_err(|e| format!("Failed to delete file: {}", e))
+}
+
+// Parsed configuration commands
+
+/// Test device file listing
+#[tauri::command]
+pub async fn test_list_device_files(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Vec<String>, String> {
+    log::info!("Testing LIST_FILES command");
+    
+    let files = device_manager
+        .list_device_files()
+        .await
+        .map_err(|e| {
+            log::error!("Failed to list device files: {}", e);
+            format!("Failed to list device files: {}", e)
+        })?;
+
+    log::info!("Found {} files: {:?}", files.len(), files);
+    Ok(files)
+}
+
+/// Read and parse device configuration into UI format
+#[tauri::command]
+pub async fn read_parsed_device_config(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(Vec<UIAxisConfig>, Vec<UIButtonConfig>), String> {
+    
+    // Read raw binary configuration
+    let raw_data = device_manager
+        .read_config_binary()
+        .await
+        .map_err(|e| {
+            log::error!("Failed to read config binary: {}", e);
+            format!("Failed to read config binary: {}", e)
+        })?;
+
+    // Parse binary data
+    let config = BinaryConfig::from_bytes(&raw_data)
+        .map_err(|e| {
+            log::error!("Failed to parse config binary: {}", e);
+            format!("Failed to parse config binary: {}", e)
+        })?;
+
+    // Convert to UI format
+    let axes = config.to_axis_configs();
+    let buttons = config.to_button_configs();
+
+    Ok((axes, buttons))
 }
