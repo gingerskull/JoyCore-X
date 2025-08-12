@@ -14,7 +14,7 @@ export function DeviceConnection() {
   const {
     devices,
     connectedDevice,
-    connectionInfo,
+    // connectionInfo,
     isLoading,
     connectDevice,
     disconnectDevice,

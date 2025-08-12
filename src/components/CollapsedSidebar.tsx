@@ -18,7 +18,7 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
     isLoading,
     connectDevice,
     disconnectDevice,
-    isConnected,
+    // isConnected,
     isConnecting
   } = useDeviceContext();
 
@@ -64,24 +64,24 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
     }
   };
 
-  const getOverallStatus = () => {
-    if (isConnected) return 'connected';
-    if (devices.length === 0) return 'no-devices';
-    return 'available';
-  };
+  // const getOverallStatus = () => {
+  //   if (isConnected) return 'connected';
+  //   if (devices.length === 0) return 'no-devices';
+  //   return 'available';
+  // };
 
-  const getStatusColor = () => {
-    switch (getOverallStatus()) {
-      case 'connected':
-        return 'text-green-600 dark:text-green-400';
-      case 'no-devices':
-        return 'text-gray-400 dark:text-gray-500';
-      case 'available':
-        return 'text-blue-600 dark:text-blue-400';
-      default:
-        return 'text-gray-400';
-    }
-  };
+  // const getStatusColor = () => {
+  //   switch (getOverallStatus()) {
+  //     case 'connected':
+  //       return 'text-green-600 dark:text-green-400';
+  //     case 'no-devices':
+  //       return 'text-gray-400 dark:text-gray-500';
+  //     case 'available':
+  //       return 'text-blue-600 dark:text-blue-400';
+  //     default:
+  //       return 'text-gray-400';
+  //   }
+  // };
 
   return (
     <div className="h-full p-3">
@@ -117,7 +117,7 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
             </div>
           </div>
         ) : (
-          devices.map((device, index) => {
+          devices.map((device) => {
             const isDeviceConnected = device.connection_state === 'Connected';
             const isDeviceConnecting = connectingToId === device.id || 
               (isConnecting && connectedDevice?.id === device.id);

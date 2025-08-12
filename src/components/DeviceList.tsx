@@ -21,11 +21,11 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
   const {
     devices,
     connectedDevice,
-    connectionInfo,
+    // connectionInfo,
     isLoading,
     connectDevice,
     disconnectDevice,
-    discoverDevices,
+    // discoverDevices,
     isConnected,
     isConnecting
   } = useDeviceContext();

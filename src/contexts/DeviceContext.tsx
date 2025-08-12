@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { useDevice } from '@/hooks/useDevice';
 import type { Device, DeviceStatus, ConnectionInfo } from '@/lib/types';
 

@@ -9,7 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+// import { Progress } from '@/components/ui/progress';
 
 import type { DeviceStatus, AxisConfig } from '@/lib/types';
 
@@ -22,7 +22,7 @@ interface AxisConfigurationProps {
 
 export function AxisConfiguration({ deviceStatus, isConnected = false, axisConfigs, onConfigUpdate }: AxisConfigurationProps) {
   const [localAxisConfigs, setLocalAxisConfigs] = useState<AxisConfig[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const [selectedAxis, setSelectedAxis] = useState<number>(0);
 
   // Use provided configs or local state

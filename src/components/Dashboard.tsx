@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Gamepad2, AlertCircle, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { RefreshCw, Gamepad2, AlertCircle, Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceList } from './DeviceList';
 import { CollapsedSidebar } from './CollapsedSidebar';
 import { ConfigurationTabs } from './ConfigurationTabs';
+import { FirmwareUpdateDialog } from './FirmwareUpdateDialog';
+import { FirmwareUpdateNotification } from './FirmwareUpdateNotification';
+import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
 
 export function Dashboard() {
   const {
@@ -32,6 +34,24 @@ export function Dashboard() {
     // Load saved preference from localStorage
     const saved = localStorage.getItem('joycore-sidebar-collapsed');
     return saved ? JSON.parse(saved) : false;
+  });
+
+  // Firmware update state
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [showUpdateNotification, setShowUpdateNotification] = useState(false);
+  const [notificationDismissed, setNotificationDismissed] = useState(false);
+
+  // Get current firmware version from connected device
+  const currentFirmwareVersion = connectedDevice?.device_status?.firmware_version;
+
+  // Use firmware update hook
+  const {
+    isChecking: isCheckingUpdates,
+    hasUpdateAvailable,
+    latestVersion,
+  } = useFirmwareUpdates({
+    currentVersion: currentFirmwareVersion,
+    autoCheck: true,
   });
 
   // Auto-discover devices on mount
@@ -64,6 +84,15 @@ export function Dashboard() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [sidebarCollapsed]);
 
+  // Show update notification when update is available
+  useEffect(() => {
+    if (hasUpdateAvailable && !notificationDismissed) {
+      setShowUpdateNotification(true);
+    } else {
+      setShowUpdateNotification(false);
+    }
+  }, [hasUpdateAvailable, notificationDismissed]);
+
   const handleRefresh = async () => {
     clearError();
     // For manual refresh, only use cleanup if we're not connected
@@ -76,6 +105,16 @@ export function Dashboard() {
     const newState = !sidebarCollapsed;
     setSidebarCollapsed(newState);
     localStorage.setItem('joycore-sidebar-collapsed', JSON.stringify(newState));
+  };
+
+  const handleUpdateDialogOpen = () => {
+    setShowUpdateDialog(true);
+    setNotificationDismissed(true);
+  };
+
+  const handleUpdateNotificationDismiss = () => {
+    setNotificationDismissed(true);
+    setShowUpdateNotification(false);
   };
 
 
@@ -91,6 +130,25 @@ export function Dashboard() {
           </div>
           
           <div className="ml-auto flex items-center space-x-4">
+            {/* Firmware update button (only show when connected to a device) */}
+            {isConnected && currentFirmwareVersion && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleUpdateDialogOpen}
+                disabled={isCheckingUpdates}
+                className={hasUpdateAvailable ? "border-blue-500 bg-blue-50 hover:bg-blue-100" : ""}
+              >
+                <Download className={`w-4 h-4 mr-2 ${isCheckingUpdates ? 'animate-pulse' : ''}`} />
+                {hasUpdateAvailable ? 'Update Available' : 'Check Updates'}
+                {hasUpdateAvailable && (
+                  <Badge variant="secondary" className="ml-2 bg-blue-500 text-white">
+                    {latestVersion}
+                  </Badge>
+                )}
+              </Button>
+            )}
+            
             <Button 
               variant="outline" 
               size="sm"
@@ -125,6 +183,17 @@ export function Dashboard() {
         {/* Main Panel */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-3 flex-1">
+            {/* Firmware Update Notification */}
+            {showUpdateNotification && currentFirmwareVersion && latestVersion && (
+              <FirmwareUpdateNotification
+                currentVersion={currentFirmwareVersion}
+                latestVersion={latestVersion}
+                isVisible={showUpdateNotification}
+                onCheckUpdates={handleUpdateDialogOpen}
+                onDismiss={handleUpdateNotificationDismiss}
+              />
+            )}
+            
             {/* Error Alert */}
             {hasError && (error || connectionInfo.error) && (
               <Alert variant="destructive" className="mb-6">
@@ -205,6 +274,17 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Firmware Update Dialog */}
+      {currentFirmwareVersion && (
+        <FirmwareUpdateDialog
+          currentVersion={currentFirmwareVersion}
+          isOpen={showUpdateDialog}
+          onClose={() => setShowUpdateDialog(false)}
+          repoOwner="gingerskull"
+          repoName="JoyCore-FW"
+        />
+      )}
     </div>
   );
 }

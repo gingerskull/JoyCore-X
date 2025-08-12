@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Settings, Joystick, MousePointer, User, Save, Upload, Download, RotateCcw } from 'lucide-react';
+import { Settings, Joystick, MousePointer, User, Save, Upload, RotateCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress';
+// import { Separator } from '@/components/ui/separator';
+// import { Progress } from '@/components/ui/progress';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { AxisConfiguration } from './AxisConfiguration';

@@ -21,7 +21,7 @@ interface ButtonConfigurationProps {
 
 export function ButtonConfiguration({ deviceStatus, isConnected = false, buttonConfigs, onConfigUpdate }: ButtonConfigurationProps) {
   const [localButtonConfigs, setLocalButtonConfigs] = useState<ButtonConfig[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
 
   // Use provided configs or local state
   const configs = buttonConfigs || localButtonConfigs;

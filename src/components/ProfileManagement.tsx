@@ -27,7 +27,7 @@ interface ProfileManagementProps {
 
 export function ProfileManagement({ deviceStatus }: ProfileManagementProps) {
   const [profileManager, setProfileManager] = useState<ProfileManager | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
   const [newProfileDescription, setNewProfileDescription] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
