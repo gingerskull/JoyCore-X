@@ -181,6 +181,19 @@ pub struct AppSettings {
     pub theme: String, // "light", "dark", "system"
     pub language: String,
     pub update_rate_ms: u64,
+    pub firmware_update: FirmwareUpdateSettings,
+}
+
+/// Firmware update settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirmwareUpdateSettings {
+    pub auto_check: bool,
+    pub check_interval_hours: u64,
+    pub repo_owner: String,
+    pub repo_name: String,
+    pub download_directory: String,
+    pub verify_signatures: bool,
+    pub last_check: Option<DateTime<Utc>>,
 }
 
 impl Default for AppSettings {
@@ -192,6 +205,21 @@ impl Default for AppSettings {
             theme: "system".to_string(),
             language: "en".to_string(),
             update_rate_ms: 100,
+            firmware_update: FirmwareUpdateSettings::default(),
+        }
+    }
+}
+
+impl Default for FirmwareUpdateSettings {
+    fn default() -> Self {
+        Self {
+            auto_check: true,
+            check_interval_hours: 24,
+            repo_owner: "gingerskull".to_string(),
+            repo_name: "JoyCore-FW".to_string(),
+            download_directory: "downloads".to_string(),
+            verify_signatures: true,
+            last_check: None,
         }
     }
 }

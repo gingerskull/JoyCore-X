@@ -2,9 +2,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
+use semver::Version;
 
 use crate::serial::{SerialInterface, ConfigProtocol};
-use super::{Device, ConnectionState, ProfileManager, DeviceError, Result};
+use crate::update::{UpdateService, VersionCheckResult};
+use super::{Device, ConnectionState, ProfileManager, DeviceError, Result, FirmwareUpdateSettings};
 
 /// Central device management system
 /// Handles device discovery, connection management, and configuration
@@ -392,6 +394,56 @@ impl DeviceManager {
         if let Some(device) = devices_guard.get_mut(device_id) {
             device.update_device_status(status);
         }
+    }
+
+    // Firmware update methods
+
+    /// Check for firmware updates for the connected device
+    pub async fn check_device_firmware_updates(
+        &self,
+        update_settings: &FirmwareUpdateSettings,
+    ) -> Result<Option<VersionCheckResult>> {
+        let connected_guard = self.connected_device.lock().await;
+        
+        if let Some((device_id, _)) = connected_guard.as_ref() {
+            let devices_guard = self.devices.read().await;
+            if let Some(device) = devices_guard.get(device_id) {
+                if let Some(device_status) = &device.device_status {
+                    let current_version = Version::parse(&device_status.firmware_version)
+                        .map_err(|e| DeviceError::UpdateError(format!("Invalid firmware version: {}", e)))?;
+                    
+                    let update_service = UpdateService::new(
+                        update_settings.repo_owner.clone(),
+                        update_settings.repo_name.clone(),
+                    );
+                    
+                    let result = update_service
+                        .check_for_updates(current_version)
+                        .await
+                        .map_err(|e| DeviceError::UpdateError(format!("Update check failed: {}", e)))?;
+                    
+                    return Ok(Some(result));
+                }
+            }
+        }
+        
+        Ok(None)
+    }
+
+    /// Get current firmware version of connected device
+    pub async fn get_device_firmware_version(&self) -> Option<String> {
+        let connected_guard = self.connected_device.lock().await;
+        
+        if let Some((device_id, _)) = connected_guard.as_ref() {
+            let devices_guard = self.devices.read().await;
+            if let Some(device) = devices_guard.get(device_id) {
+                return device.device_status
+                    .as_ref()
+                    .map(|status| status.firmware_version.clone());
+            }
+        }
+        
+        None
     }
 }
 

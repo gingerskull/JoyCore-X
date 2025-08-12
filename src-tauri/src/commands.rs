@@ -1,9 +1,12 @@
 use std::sync::Arc;
-use tauri::State;
+use std::path::PathBuf;
+use tauri::{State, Emitter};
 use uuid::Uuid;
+use semver::Version;
 
 use crate::device::{DeviceManager, Device, ProfileConfig, ProfileManager};
 use crate::serial::protocol::{DeviceStatus, AxisConfig, ButtonConfig};
+use crate::update::{UpdateService, VersionCheckResult};
 
 /// Discover available JoyCore devices
 #[tauri::command]
@@ -230,4 +233,94 @@ pub async fn set_active_profile(
         .map_err(|e| format!("Failed to set active profile: {}", e))?;
     
     Ok(success)
+}
+
+// Firmware update commands
+
+/// Check for firmware updates
+#[tauri::command]
+pub async fn check_firmware_updates(
+    current_version: String,
+    repo_owner: String,
+    repo_name: String,
+) -> Result<VersionCheckResult, String> {
+    let version = Version::parse(&current_version)
+        .map_err(|e| format!("Invalid current version: {}", e))?;
+    
+    let update_service = UpdateService::new(repo_owner, repo_name);
+    update_service
+        .check_for_updates(version)
+        .await
+        .map_err(|e| format!("Failed to check for updates: {}", e))
+}
+
+/// Download firmware update
+#[tauri::command]
+pub async fn download_firmware_update(
+    download_url: String,
+    version: String,
+    changelog: String,
+    published_at: String,
+    size_bytes: u64,
+    output_dir: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    use crate::update::models::FirmwareRelease;
+    
+    let version_parsed = Version::parse(&version)
+        .map_err(|e| format!("Invalid version: {}", e))?;
+    
+    let published_at_parsed = chrono::DateTime::parse_from_rfc3339(&published_at)
+        .map_err(|e| format!("Invalid date: {}", e))?
+        .with_timezone(&chrono::Utc);
+    
+    let release = FirmwareRelease {
+        version: version_parsed.clone(),
+        download_url,
+        changelog,
+        published_at: published_at_parsed,
+        size_bytes,
+        sha256_hash: None,
+    };
+    
+    let output_path = PathBuf::from(&output_dir).join(format!("firmware-{}.uf2", version_parsed));
+    let update_service = UpdateService::new("gingerskull".to_string(), "JoyCore-FW".to_string());
+    
+    update_service
+        .download_firmware(&release, &output_path, |progress| {
+            // Emit progress events to frontend
+            let _ = app_handle.emit("download_progress", &progress);
+        })
+        .await
+        .map_err(|e| format!("Failed to download firmware: {}", e))?;
+    
+    Ok(output_path.to_string_lossy().to_string())
+}
+
+/// Get all available firmware versions
+#[tauri::command]
+pub async fn get_available_firmware_versions(
+    repo_owner: String,
+    repo_name: String,
+) -> Result<Vec<crate::update::models::FirmwareRelease>, String> {
+    let update_service = UpdateService::new(repo_owner, repo_name);
+    update_service
+        .get_available_versions()
+        .await
+        .map_err(|e| format!("Failed to get available versions: {}", e))
+}
+
+/// Verify downloaded firmware integrity
+#[tauri::command]
+pub async fn verify_firmware(
+    file_path: String,
+    expected_hash: Option<String>,
+) -> Result<bool, String> {
+    let path = PathBuf::from(&file_path);
+    let update_service = UpdateService::new("".to_string(), "".to_string());
+    
+    update_service
+        .verify_firmware(&path, expected_hash.as_deref())
+        .await
+        .map_err(|e| format!("Failed to verify firmware: {}", e))
 }

@@ -1,6 +1,7 @@
 pub mod serial;
 pub mod device;
 pub mod commands;
+pub mod update;
 
 use std::sync::Arc;
 use device::DeviceManager;
@@ -31,6 +32,10 @@ pub fn run() {
       commands::update_profile,
       commands::delete_profile,
       commands::set_active_profile,
+      commands::check_firmware_updates,
+      commands::download_firmware_update,
+      commands::get_available_firmware_versions,
+      commands::verify_firmware,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

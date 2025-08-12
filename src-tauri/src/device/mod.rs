@@ -24,6 +24,9 @@ pub enum DeviceError {
     
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+    
+    #[error("Update error: {0}")]
+    UpdateError(String),
 }
 
 pub type Result<T> = std::result::Result<T, DeviceError>;
