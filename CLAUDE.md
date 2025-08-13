@@ -18,6 +18,11 @@ npm run preview    # Preview production build locally
 npm run lint       # Run ESLint
 ```
 
+### Security
+```bash
+cargo audit        # Scan Rust dependencies for vulnerabilities (from src-tauri/)
+```
+
 ### Build Process
 The build process involves:
 1. TypeScript compilation (`tsc -b`)
