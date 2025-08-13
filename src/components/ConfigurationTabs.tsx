@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Settings, Joystick, MousePointer, User, Save, Upload, RotateCcw } from 'lucide-react';
+import { Settings, Joystick, MousePointer, User, Save, Upload, RotateCcw, Cpu } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,7 @@ import { AxisConfiguration } from './AxisConfiguration';
 import { ButtonConfiguration } from './ButtonConfiguration';
 import { ProfileManagement } from './ProfileManagement';
 import { DeviceConfigManagement } from './DeviceConfigManagement';
+import { PinoutConfiguration } from './PinoutConfiguration';
 import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
 
 export function ConfigurationTabs() {
@@ -199,7 +200,7 @@ export function ConfigurationTabs() {
 
       {/* Configuration Tabs */}
       <Tabs defaultValue="axes" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="axes" className="flex items-center">
             <Joystick className="w-4 h-4 mr-2" />
             Axes
@@ -207,6 +208,10 @@ export function ConfigurationTabs() {
           <TabsTrigger value="buttons" className="flex items-center">
             <MousePointer className="w-4 h-4 mr-2" />
             Buttons
+          </TabsTrigger>
+          <TabsTrigger value="pinout" className="flex items-center">
+            <Cpu className="w-4 h-4 mr-2" />
+            Pinout
           </TabsTrigger>
           <TabsTrigger value="profiles" className="flex items-center">
             <User className="w-4 h-4 mr-2" />
@@ -234,6 +239,10 @@ export function ConfigurationTabs() {
             parsedButtons={parsedButtons}
             isLoading={configLoading}
           />
+        </TabsContent>
+
+        <TabsContent value="pinout" className="space-y-4">
+          <PinoutConfiguration />
         </TabsContent>
 
         <TabsContent value="profiles" className="space-y-4">
