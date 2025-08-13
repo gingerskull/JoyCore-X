@@ -8,16 +8,21 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
-import type { Device } from '@/lib/types';
+import { DeviceConfiguration } from './DeviceConfiguration';
+import type { Device, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
 
 interface DeviceListProps {
   onCollapse: () => void;
   deviceCount: number;
   onRefresh: () => void;
   isLoading: boolean;
+  parsedAxes: ParsedAxisConfig[];
+  parsedButtons: ParsedButtonConfig[];
+  setParsedAxes: (axes: ParsedAxisConfig[]) => void;
+  setParsedButtons: (buttons: ParsedButtonConfig[]) => void;
 }
 
-export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRefreshing }: DeviceListProps) {
+export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRefreshing, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons }: DeviceListProps) {
   const {
     devices,
     connectedDevice,
@@ -104,133 +109,145 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        
-          <CardTitle className="text-lg font-semibold justify-between inline-flex">DEVICES
-<Button 
-            variant="ghost" 
-            size="icon"
-            onClick={onCollapse}
-            className="h-8 w-8"
-            title="Collapse sidebar">
-            <PanelLeftClose className="" />
-          </Button>
+    <div className="space-y-3">
+      <Card>
+        <CardHeader className="pb-3">
+          
+            <CardTitle className="text-lg font-semibold justify-between inline-flex">DEVICES
+  <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={onCollapse}
+              className="h-8 w-8"
+              title="Collapse sidebar">
+              <PanelLeftClose className="" />
+            </Button>
 
-          </CardTitle>
-          
-      
-    
-        <div className="pl-1 pr-1">
-        
+            </CardTitle>
             
-            <Button 
-            variant="outline" 
-            size="sm"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className="w-full text-xs h-8 rou"
-            title="Refresh devices"
-          >
-            {deviceCount} found
-            <RefreshCw className={`${isRefreshing ? 'animate-spin' : ''}`} />
-          </Button>
-       
-          
-        </div>
-      </CardHeader>
+        
       
-      <CardContent className="pt-0">
-        {devices.length === 0 ? (
-          <div className="text-center py-8">
-            <Usb className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mb-3">
-              No JoyCore devices found
-            </p>
-            <Button 
+          <div className="pl-1 pr-1">
+          
+              
+              <Button 
               variant="outline" 
-              size="sm" 
+              size="sm"
               onClick={onRefresh}
               disabled={isRefreshing}
+              className="w-full text-xs h-8 justify-between"
+              title="Refresh devices"
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Scan for Devices
+              <span>{deviceCount} found</span>
+              <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
+         
+            
           </div>
-        ) : (
-          <ScrollArea className="max-h-96">
-            <div className="space-y-3">
-              {devices.map((device) => {
-                const isDeviceConnected = device.connection_state === 'Connected';
-                
-                return (
-                  <div
-                    key={device.id}
-                    className={`p-4 rounded-lg border transition-colors space-y-3 ${
-                      isDeviceConnected 
-                        ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' 
-                        : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    {/* Device Name Row */}
-                    <div className="flex items-center space-x-3">
-                      {getDeviceStatusIcon(device, isDeviceConnected)}
-                      <span className="font-medium text-sm flex-1">
-                        {device.product || 'JoyCore Device'}
-                      </span>
-                      {isDeviceConnected && (
-                        <Badge variant="default" className="text-xs px-2 py-0.5 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                          Active
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    {/* Port Row */}
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Port:</span> {device.port_name}
-                    </div>
-                    
-                    {/* Serial Number Row */}
-                    {device.serial_number && (
-                      <div className="text-xs text-muted-foreground">
-                        <span className="font-medium">Serial:</span> {device.serial_number}
-                      </div>
-                    )}
-                    
-                    {/* Firmware Row */}
-                    {device.device_status && (
-                      <div className="text-xs text-muted-foreground">
-                        <span className="font-medium">Firmware:</span> {device.device_status.firmware_version}
-                      </div>
-                    )}
-                    
-                    {/* Buttons & Axes Row */}
-                    {device.device_status && (
-                      <div className="text-xs text-muted-foreground">
-                        <span className="font-medium">Controls:</span> {device.device_status.axes_count} Axes, {device.device_status.buttons_count} Buttons
-                      </div>
-                    )}
-                    
-                    {/* Connection Button Row */}
-                    <div className="pt-1">
-                      {getConnectionAction(device, isDeviceConnected)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </ScrollArea>
-        )}
+        </CardHeader>
         
-        {devices.length > 0 && (
-          <>
-            <Separator className="my-3" />
-            <div className="text-xs text-muted-foreground">
-              Connect your device via USB and ensure it's in configuration mode.
+        <CardContent className="pt-0">
+          {devices.length === 0 ? (
+            <div className="text-center py-8">
+              <Usb className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground mb-3">
+                No JoyCore devices found
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Scan for Devices
+              </Button>
             </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          ) : (
+            <ScrollArea className="max-h-80">
+              <div className="space-y-3">
+                {devices.map((device) => {
+                  const isDeviceConnected = device.connection_state === 'Connected';
+                  
+                  return (
+                    <div
+                      key={device.id}
+                      className={`p-4 rounded-lg border transition-colors space-y-3 ${
+                        isDeviceConnected 
+                          ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' 
+                          : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      {/* Device Name Row */}
+                      <div className="flex items-center space-x-2">
+                        {getDeviceStatusIcon(device, isDeviceConnected)}
+                        <span className="font-medium text-sm flex-1 truncate">
+                          {device.product || 'JoyCore Device'}
+                        </span>
+                        {isDeviceConnected && (
+                          <Badge variant="default" className="text-xs px-1 py-0 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex-shrink-0">
+                            Active
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      {/* Port Row */}
+                      <div className="text-xs text-muted-foreground truncate">
+                        <span className="font-medium">Port:</span> {device.port_name}
+                      </div>
+                      
+                      {/* Serial Number Row */}
+                      {device.serial_number && (
+                        <div className="text-xs text-muted-foreground truncate">
+                          <span className="font-medium">Serial:</span> {device.serial_number}
+                        </div>
+                      )}
+                      
+                      {/* Firmware Row */}
+                      {device.device_status && (
+                        <div className="text-xs text-muted-foreground truncate">
+                          <span className="font-medium">FW:</span> {device.device_status.firmware_version}
+                        </div>
+                      )}
+                      
+                      {/* Buttons & Axes Row */}
+                      {device.device_status && (
+                        <div className="text-xs text-muted-foreground truncate">
+                          <span className="font-medium">Controls:</span> {device.device_status.axes_count}A, {device.device_status.buttons_count}B
+                        </div>
+                      )}
+                      
+                      {/* Connection Button Row */}
+                      <div className="pt-1">
+                        {getConnectionAction(device, isDeviceConnected)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          )}
+          
+          {devices.length > 0 && (
+            <>
+              <Separator className="my-3" />
+              <div className="text-xs text-muted-foreground">
+                Connect your device via USB and ensure it's in configuration mode.
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Device Configuration Section */}
+      {isConnected && (
+        <DeviceConfiguration 
+          parsedAxes={parsedAxes}
+          parsedButtons={parsedButtons}
+          setParsedAxes={setParsedAxes}
+          setParsedButtons={setParsedButtons}
+        />
+      )}
+    </div>
   );
 }

@@ -3,22 +3,28 @@ import { PanelLeft, Usb, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-rea
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
-import type { Device } from '@/lib/types';
+import { DeviceConfiguration } from './DeviceConfiguration';
+import type { Device, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
 
 interface CollapsedSidebarProps {
   onExpand: () => void;
+  parsedAxes: ParsedAxisConfig[];
+  parsedButtons: ParsedButtonConfig[];
+  setParsedAxes: (axes: ParsedAxisConfig[]) => void;
+  setParsedButtons: (buttons: ParsedButtonConfig[]) => void;
 }
 
-export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
+export function CollapsedSidebar({ onExpand, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons }: CollapsedSidebarProps) {
   const {
     devices,
     connectedDevice,
     isLoading,
     connectDevice,
     disconnectDevice,
-    // isConnected,
+    isConnected,
     isConnecting
   } = useDeviceContext();
 
@@ -101,7 +107,7 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
 
         {/* Device Count Section */}
         <div className="flex flex-col items-center space-y-1">
-          <Badge variant="outline" className="rounded-sm w-8 h-8 text-xs px-2 py-0.5 text-center">
+          <Badge variant="outline" className="rounded-sm w-8 h-8 text-xs flex items-center justify-center">
             {devices.length}
           </Badge>
           
@@ -145,12 +151,12 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
 
                 {/* Hover Tooltip */}
                 {hoveredDevice === device.id && (
-                  <div className="absolute left-16 top-0 z-50 bg-popover border rounded-md shadow-md p-2 min-w-48">
+                  <div className="absolute left-16 top-0 z-50 bg-popover border rounded-md shadow-md p-2 min-w-48 max-w-64">
                     <div className="text-xs space-y-1">
-                      <div className="font-medium">{device.product || 'JoyCore Device'}</div>
-                      <div className="text-muted-foreground">{device.port_name}</div>
+                      <div className="font-medium truncate">{device.product || 'JoyCore Device'}</div>
+                      <div className="text-muted-foreground truncate">{device.port_name}</div>
                       {device.device_status && (
-                        <div className="text-muted-foreground">
+                        <div className="text-muted-foreground truncate">
                           FW: {device.device_status.firmware_version}
                         </div>
                       )}
@@ -169,6 +175,20 @@ export function CollapsedSidebar({ onExpand }: CollapsedSidebarProps) {
           })
         )}
         </div>
+
+        {/* Device Configuration Section */}
+        {isConnected && (
+          <>
+            <Separator className="my-2" />
+            <DeviceConfiguration 
+              collapsed={true}
+              parsedAxes={parsedAxes}
+              parsedButtons={parsedButtons}
+              setParsedAxes={setParsedAxes}
+              setParsedButtons={setParsedButtons}
+            />
+          </>
+        )}
       </div>
     </div>
   );

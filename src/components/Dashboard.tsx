@@ -7,12 +7,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
+import { useDeviceConfigReader } from '@/hooks/useDeviceConfigReader';
 import { DeviceList } from './DeviceList';
 import { CollapsedSidebar } from './CollapsedSidebar';
 import { ConfigurationTabs } from './ConfigurationTabs';
 import { FirmwareUpdateDialog } from './FirmwareUpdateDialog';
 import { FirmwareUpdateNotification } from './FirmwareUpdateNotification';
 import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
+import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
 
 export function Dashboard() {
   const {
@@ -26,8 +28,11 @@ export function Dashboard() {
     refreshDevicesSilently,
     isConnected,
     hasError,
-    clearError
+    clearError,
+    getDeviceStatus
   } = useDeviceContext();
+
+  const { isLoading: configLoading, error: configError, clearError: clearConfigError } = useDeviceConfigReader();
 
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -35,6 +40,11 @@ export function Dashboard() {
     const saved = localStorage.getItem('joycore-sidebar-collapsed');
     return saved ? JSON.parse(saved) : false;
   });
+
+  // Device configuration state
+  const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null);
+  const [parsedAxes, setParsedAxes] = useState<ParsedAxisConfig[]>([]);
+  const [parsedButtons, setParsedButtons] = useState<ParsedButtonConfig[]>([]);
 
   // Firmware update state
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
@@ -58,6 +68,35 @@ export function Dashboard() {
   useEffect(() => {
     discoverDevices();
   }, [discoverDevices]);
+
+  // Load device status when connected
+  useEffect(() => {
+    const loadDeviceStatus = async () => {
+      if (!connectedDevice) {
+        setDeviceStatus(null);
+        return;
+      }
+      
+      try {
+        const status = await getDeviceStatus();
+        setDeviceStatus(status);
+      } catch (err) {
+        console.error('Failed to load device status:', err);
+      }
+    };
+
+    loadDeviceStatus();
+  }, [connectedDevice, getDeviceStatus, isConnected]);
+
+  // Clear states when disconnected
+  useEffect(() => {
+    if (isConnected === false) {
+      setParsedAxes([]);
+      setParsedButtons([]);
+      setDeviceStatus(null);
+      clearConfigError();
+    }
+  }, [isConnected, clearConfigError]);
 
   // Refresh devices periodically (silent background refresh)
   useEffect(() => {
@@ -167,14 +206,24 @@ export function Dashboard() {
         {/* Sidebar */}
         <div className={`${sidebarCollapsed ? 'w-20' : 'w-80'} border-r transition-all duration-300 ease-in-out`}>
           {sidebarCollapsed ? (
-            <CollapsedSidebar onExpand={() => setSidebarCollapsed(false)} />
+            <CollapsedSidebar 
+              onExpand={() => setSidebarCollapsed(false)}
+              parsedAxes={parsedAxes}
+              parsedButtons={parsedButtons}
+              setParsedAxes={setParsedAxes}
+              setParsedButtons={setParsedButtons}
+            />
           ) : (
-            <div className="p-3">
+            <div className="p-3 h-full overflow-y-auto">
               <DeviceList 
                 onCollapse={() => setSidebarCollapsed(true)}
                 deviceCount={devices.length}
                 onRefresh={handleRefresh}
                 isLoading={isLoading}
+                parsedAxes={parsedAxes}
+                parsedButtons={parsedButtons}
+                setParsedAxes={setParsedAxes}
+                setParsedButtons={setParsedButtons}
               />
             </div>
           )}
@@ -214,7 +263,12 @@ export function Dashboard() {
 
             {/* Main Dashboard Content */}
             {isConnected ? (
-              <ConfigurationTabs />
+              <ConfigurationTabs 
+                deviceStatus={deviceStatus}
+                parsedAxes={parsedAxes}
+                parsedButtons={parsedButtons}
+                isConfigLoading={configLoading}
+              />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <div className="max-w-md">
