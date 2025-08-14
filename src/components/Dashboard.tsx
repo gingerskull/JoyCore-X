@@ -93,14 +93,19 @@ export function Dashboard() {
     loadDeviceStatus();
   }, [connectedDevice, getDeviceStatus, isConnected]);
 
-  // Clear states when disconnected
+  // Clear states when disconnected (with slight delay to prevent rendering issues)
   useEffect(() => {
     if (isConnected === false) {
-      setParsedAxes([]);
-      setParsedButtons([]);
-      setDeviceStatus(null);
-      setDevicePinAssignments(undefined);
-      clearConfigError();
+      // Use setTimeout to ensure the disconnected UI renders first before clearing config state
+      const timeoutId = setTimeout(() => {
+        setParsedAxes([]);
+        setParsedButtons([]);
+        setDeviceStatus(null);
+        setDevicePinAssignments(undefined);
+        clearConfigError();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [isConnected, clearConfigError]);
 
