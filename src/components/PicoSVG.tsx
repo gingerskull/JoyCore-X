@@ -71,7 +71,7 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
           style={{ minHeight: '400px', maxHeight: '70vh', maxWidth: '400px' }}
         >
           <image 
-            href="/src/assets/raspberry-pi-pico.svg" 
+            href="/src/assets/raspberry-pi-pico-V2.svg" 
             width="100%" 
             height="100%"
           />
