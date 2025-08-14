@@ -1,9 +1,17 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PicoSVG } from './PicoSVG';
 import type { PinConfiguration, PinFunction, PinoutState } from '@/lib/types';
+
+interface DevicePinAssignments {
+  [gpioPin: number]: PinFunction;
+}
+
+interface PinoutConfigurationProps {
+  devicePinAssignments?: DevicePinAssignments;
+}
 
 // Default pin configuration data for RP2040 Pico
 const createDefaultPinConfigurations = (): Record<number, PinConfiguration> => {
@@ -101,12 +109,59 @@ const createDefaultPinConfigurations = (): Record<number, PinConfiguration> => {
   };
 };
 
-export function PinoutConfiguration() {
+// Merge device pin assignments with default configurations
+const mergePinConfigurations = (
+  defaults: Record<number, PinConfiguration>,
+  deviceAssignments?: DevicePinAssignments
+): Record<number, PinConfiguration> => {
+  if (!deviceAssignments) {
+    return defaults;
+  }
+
+  const merged = { ...defaults };
+
+  // Apply device pin assignments to the corresponding physical pins
+  Object.entries(deviceAssignments).forEach(([gpioPin, pinFunction]) => {
+    const gpioNumber = parseInt(gpioPin, 10);
+    
+    // Find the physical pin that corresponds to this GPIO
+    Object.keys(merged).forEach(physicalPinStr => {
+      const physicalPin = parseInt(physicalPinStr, 10);
+      const pinConfig = merged[physicalPin];
+      
+      // Check if this physical pin corresponds to the GPIO pin
+      if (pinConfig.gpioNumber === gpioNumber && pinConfig.isConfigurable) {
+        // Verify the pin function is available for this pin
+        if (pinConfig.availableFunctions.includes(pinFunction)) {
+          merged[physicalPin] = {
+            ...pinConfig,
+            currentFunction: pinFunction,
+          };
+        }
+      }
+    });
+  });
+
+  return merged;
+};
+
+export function PinoutConfiguration({ devicePinAssignments }: PinoutConfigurationProps) {
   const [pinoutState, setPinoutState] = useState<PinoutState>({
     pins: createDefaultPinConfigurations(),
     lastModified: undefined,
   });
   const [showLegend, setShowLegend] = useState(false);
+
+  // Update pin configuration when device assignments change
+  useEffect(() => {
+    const defaultPins = createDefaultPinConfigurations();
+    const mergedPins = mergePinConfigurations(defaultPins, devicePinAssignments);
+    
+    setPinoutState({
+      pins: mergedPins,
+      lastModified: devicePinAssignments ? new Date() : undefined,
+    });
+  }, [devicePinAssignments]);
 
   const handlePinFunctionChange = useCallback((pinNumber: number, newFunction: PinFunction) => {
     setPinoutState(prev => ({

@@ -9,7 +9,11 @@ import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceConfiguration } from './DeviceConfiguration';
-import type { Device, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
+import type { Device, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
+
+interface DevicePinAssignments {
+  [gpioPin: number]: PinFunction;
+}
 
 interface DeviceListProps {
   onCollapse: () => void;
@@ -20,9 +24,10 @@ interface DeviceListProps {
   parsedButtons: ParsedButtonConfig[];
   setParsedAxes: (axes: ParsedAxisConfig[]) => void;
   setParsedButtons: (buttons: ParsedButtonConfig[]) => void;
+  setDevicePinAssignments?: (pinAssignments: DevicePinAssignments | undefined) => void;
 }
 
-export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRefreshing, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons }: DeviceListProps) {
+export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRefreshing, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons, setDevicePinAssignments }: DeviceListProps) {
   const {
     devices,
     connectedDevice,
@@ -246,6 +251,7 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
           parsedButtons={parsedButtons}
           setParsedAxes={setParsedAxes}
           setParsedButtons={setParsedButtons}
+          setDevicePinAssignments={setDevicePinAssignments}
         />
       )}
     </div>

@@ -7,7 +7,11 @@ import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceConfiguration } from './DeviceConfiguration';
-import type { Device, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
+import type { Device, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
+
+interface DevicePinAssignments {
+  [gpioPin: number]: PinFunction;
+}
 
 interface CollapsedSidebarProps {
   onExpand: () => void;
@@ -15,9 +19,10 @@ interface CollapsedSidebarProps {
   parsedButtons: ParsedButtonConfig[];
   setParsedAxes: (axes: ParsedAxisConfig[]) => void;
   setParsedButtons: (buttons: ParsedButtonConfig[]) => void;
+  setDevicePinAssignments?: (pinAssignments: DevicePinAssignments | undefined) => void;
 }
 
-export function CollapsedSidebar({ onExpand, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons }: CollapsedSidebarProps) {
+export function CollapsedSidebar({ onExpand, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons, setDevicePinAssignments }: CollapsedSidebarProps) {
   const {
     devices,
     connectedDevice,
@@ -186,6 +191,7 @@ export function CollapsedSidebar({ onExpand, parsedAxes, parsedButtons, setParse
               parsedButtons={parsedButtons}
               setParsedAxes={setParsedAxes}
               setParsedButtons={setParsedButtons}
+              setDevicePinAssignments={setDevicePinAssignments}
             />
           </>
         )}

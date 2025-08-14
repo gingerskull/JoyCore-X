@@ -8,16 +8,21 @@ import { ButtonConfiguration } from './ButtonConfiguration';
 import { ProfileManagement } from './ProfileManagement';
 import { DeviceConfigManagement } from './DeviceConfigManagement';
 import { PinoutConfiguration } from './PinoutConfiguration';
-import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
+import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
+
+interface DevicePinAssignments {
+  [gpioPin: number]: PinFunction;
+}
 
 interface ConfigurationTabsProps {
   deviceStatus: DeviceStatus | null;
   parsedAxes: ParsedAxisConfig[];
   parsedButtons: ParsedButtonConfig[];
   isConfigLoading: boolean;
+  devicePinAssignments?: DevicePinAssignments;
 }
 
-export function ConfigurationTabs({ deviceStatus, parsedAxes, parsedButtons, isConfigLoading }: ConfigurationTabsProps) {
+export function ConfigurationTabs({ deviceStatus, parsedAxes, parsedButtons, isConfigLoading, devicePinAssignments }: ConfigurationTabsProps) {
   const { connectedDevice, isConnected } = useDeviceContext();
 
 
@@ -69,7 +74,7 @@ export function ConfigurationTabs({ deviceStatus, parsedAxes, parsedButtons, isC
       </TabsContent>
 
       <TabsContent value="pinout" className="space-y-4">
-        <PinoutConfiguration />
+        <PinoutConfiguration devicePinAssignments={devicePinAssignments} />
       </TabsContent>
 
       <TabsContent value="profiles" className="space-y-4">

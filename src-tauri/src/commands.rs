@@ -493,3 +493,66 @@ pub async fn read_parsed_device_config(
 
     Ok((axes, buttons))
 }
+
+/// Read device pin assignments from configuration
+#[tauri::command]
+pub async fn read_device_pin_assignments(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<std::collections::HashMap<u8, String>, String> {
+    
+    // Read raw binary configuration
+    let raw_data = device_manager
+        .read_config_binary()
+        .await
+        .map_err(|e| {
+            log::error!("Failed to read config binary for pin assignments: {}", e);
+            format!("Failed to read config binary: {}", e)
+        })?;
+
+    // Parse binary data
+    let config = BinaryConfig::from_bytes(&raw_data)
+        .map_err(|e| {
+            log::error!("Failed to parse config binary for pin assignments: {}", e);
+            format!("Failed to parse config binary: {}", e)
+        })?;
+
+    // Extract pin assignments
+    let pin_assignments = config.to_pin_assignments();
+    
+    log::info!("Extracted {} pin assignments from device config", pin_assignments.len());
+    
+    Ok(pin_assignments)
+}
+
+/// Read and parse device configuration into UI format with pin assignments in one call
+#[tauri::command]
+pub async fn read_parsed_device_config_with_pins(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(Vec<UIAxisConfig>, Vec<UIButtonConfig>, std::collections::HashMap<u8, String>), String> {
+    
+    // Read raw binary configuration once
+    let raw_data = device_manager
+        .read_config_binary()
+        .await
+        .map_err(|e| {
+            log::error!("Failed to read config binary: {}", e);
+            format!("Failed to read config binary: {}", e)
+        })?;
+
+    // Parse binary data once
+    let config = BinaryConfig::from_bytes(&raw_data)
+        .map_err(|e| {
+            log::error!("Failed to parse config binary: {}", e);
+            format!("Failed to parse config binary: {}", e)
+        })?;
+
+    // Convert to UI format
+    let axes = config.to_axis_configs();
+    let buttons = config.to_button_configs();
+    let pin_assignments = config.to_pin_assignments();
+    
+    log::info!("Loaded {} axes, {} buttons, and {} pin assignments from device config", 
+        axes.len(), buttons.len(), pin_assignments.len());
+
+    Ok((axes, buttons, pin_assignments))
+}

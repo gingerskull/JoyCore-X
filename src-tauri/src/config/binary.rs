@@ -368,6 +368,94 @@ impl BinaryConfig {
         
         configs
     }
+
+
+    /// Extract pin assignments from the configuration
+    pub fn to_pin_assignments(&self) -> std::collections::HashMap<u8, String> {
+        let mut pin_assignments = std::collections::HashMap::new();
+        
+        // SOURCE 1: Extract analog axis pin assignments
+        for (i, stored_axis) in self.stored_config.axes.iter().enumerate() {
+            if stored_axis.enabled != 0 {
+                log::info!("Found enabled axis {}: pin {}", i, stored_axis.pin);
+                pin_assignments.insert(stored_axis.pin, "ANALOG_AXIS".to_string());
+            }
+        }
+        
+        // SOURCE 2: Extract pin assignments from pin map entries (PRIMARY source)
+        log::info!("Processing {} pin map entries for pin assignments", self.pin_map_entries.len());
+        for (i, pin_entry) in self.pin_map_entries.iter().enumerate() {
+            // Extract pin name from first 8 bytes (null-terminated string)
+            let name_bytes = &pin_entry.name;
+            let pin_name = String::from_utf8_lossy(name_bytes)
+                .trim_end_matches('\0')
+                .trim()
+                .to_string();
+            
+            log::info!("Pin map entry {}: name='{}', type={}", i, pin_name, pin_entry.pin_type);
+            
+            // Map pin type to function string
+            let pin_function = match pin_entry.pin_type {
+                0 => {
+                    log::info!("Skipping PIN_UNUSED");
+                    continue;
+                },
+                1 => "BTN",
+                2 => "BTN_ROW",
+                3 => "BTN_COL", 
+                4 => "SHIFTREG_PL",
+                5 => "SHIFTREG_CLK",
+                6 => "SHIFTREG_QH",
+                _ => {
+                    log::warn!("Unknown pin type {}", pin_entry.pin_type);
+                    continue;
+                }
+            };
+            
+            // Parse pin name as GPIO number (firmware stores GPIO numbers directly)
+            if let Ok(gpio_num) = pin_name.parse::<u8>() {
+                log::info!("Adding pin assignment from pin map: GPIO {} -> {}", gpio_num, pin_function);
+                pin_assignments.insert(gpio_num, pin_function.to_string());
+            } else {
+                log::warn!("Could not parse pin name '{}' as GPIO number", pin_name);
+            }
+        }
+        
+        // SOURCE 3: Extract additional pin assignments from logical inputs (SECONDARY source)
+        log::info!("Processing {} logical inputs for additional pin assignments", self.logical_inputs.len());
+        for (i, logical_input) in self.logical_inputs.iter().enumerate() {
+            log::info!("Logical input {}: type={}, behavior={}, data={:?}", 
+                i, logical_input.input_type, logical_input.behavior, logical_input.data);
+                
+            if logical_input.input_type == 0 { // INPUT_PIN type
+                let pin_data = u16::from_le_bytes(logical_input.data);
+                log::info!("INPUT_PIN found: pin_data={}", pin_data);
+                
+                if pin_data <= 255 { // Valid GPIO pin range
+                    let gpio_pin = pin_data as u8;
+                    
+                    // Only add if not already assigned from pin map
+                    if !pin_assignments.contains_key(&gpio_pin) {
+                        log::info!("Adding pin assignment from logical input: GPIO {} -> BTN", gpio_pin);
+                        pin_assignments.insert(gpio_pin, "BTN".to_string());
+                    } else {
+                        log::info!("GPIO {} already assigned from pin map, skipping logical input", gpio_pin);
+                    }
+                } else {
+                    log::warn!("Pin data {} exceeds valid GPIO range", pin_data);
+                }
+            } else if logical_input.input_type == 1 { // INPUT_MATRIX
+                log::info!("Skipping INPUT_MATRIX (type 1) - doesn't map to single GPIO pins");
+            } else if logical_input.input_type == 2 { // INPUT_SHIFTREG
+                log::info!("Skipping INPUT_SHIFTREG (type 2) - shift register control pins handled by pin map");
+            } else {
+                log::info!("Unknown logical input type: {}", logical_input.input_type);
+            }
+        }
+        
+        log::info!("Final pin assignments ({} total): {:?}", pin_assignments.len(), pin_assignments);
+        pin_assignments
+    }
 }
 
 // UI-compatible structures (to avoid circular dependencies)

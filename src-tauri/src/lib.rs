@@ -51,6 +51,8 @@ pub fn run() {
       // Parsed config commands
       commands::test_list_device_files,
       commands::read_parsed_device_config,
+      commands::read_device_pin_assignments,
+      commands::read_parsed_device_config_with_pins,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

@@ -78,7 +78,7 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
         </svg>
 
         {/* Left side pin dropdowns */}
-        {leftPinPositions.map(({ pin, x, y }) => {
+        {leftPinPositions.map(({ pin, y }) => {
           const pinConfig = pinConfigurations[pin];
           const isConfigurable = pinConfig?.isConfigurable ?? false;
           
@@ -100,6 +100,13 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
                       onFunctionChange={onPinFunctionChange}
                       size="xs"
                     />
+                    {pinConfig.gpioNumber !== undefined && (
+                      <div className="bg-blue-50 border border-blue-200 rounded p-1 min-w-[2.5rem] flex items-center justify-center">
+                        <span className="text-xs font-mono font-medium text-blue-700">
+                          GP{pinConfig.gpioNumber}
+                        </span>
+                      </div>
+                    )}
                     <div className="bg-muted border rounded p-1 min-w-[2rem] flex items-center justify-center">
                       <span className="text-xs font-mono font-medium text-muted-foreground">
                         {pin}
@@ -107,7 +114,7 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
                     </div>
                   </>
                 ) : (
-                  <div className="bg-muted border rounded p-1 min-w-[2rem] flex items-center justify-center">
+                  <div className="bg-muted border rounded p-1 min-w-[5rem] flex items-center justify-center">
                     <span className="text-xs font-mono font-medium text-muted-foreground">
                       {pinConfig?.defaultLabel || `Pin ${pin}`}
                     </span>
@@ -119,7 +126,7 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
         })}
 
         {/* Right side pin dropdowns */}
-        {rightPinPositions.map(({ pin, x, y }) => {
+        {rightPinPositions.map(({ pin, y }) => {
           const pinConfig = pinConfigurations[pin];
           const isConfigurable = pinConfig?.isConfigurable ?? false;
           
@@ -141,6 +148,13 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
                         {pin}
                       </span>
                     </div>
+                    {pinConfig.gpioNumber !== undefined && (
+                      <div className="bg-blue-50 border border-blue-200 rounded p-1 min-w-[2.5rem] flex items-center justify-center">
+                        <span className="text-xs font-mono font-medium text-blue-700">
+                          GP{pinConfig.gpioNumber}
+                        </span>
+                      </div>
+                    )}
                     <PinDropdown
                       pinConfig={pinConfig}
                       onFunctionChange={onPinFunctionChange}
@@ -148,7 +162,7 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
                     />
                   </>
                 ) : (
-                  <div className="bg-muted border rounded p-1 min-w-[2rem] flex items-center justify-center w-full">
+                  <div className="bg-muted border rounded p-1 min-w-[5rem] flex items-center justify-center">
                     <span className="text-xs font-mono font-medium text-muted-foreground">
                       {pinConfig?.defaultLabel || `Pin ${pin}`}
                     </span>

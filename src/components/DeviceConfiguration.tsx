@@ -8,8 +8,12 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
-import { useDeviceConfigReader } from '@/hooks/useDeviceConfigReader';
-import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
+import { useDeviceConfigWithPins } from '@/hooks/useDeviceConfigWithPins';
+import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
+
+interface DevicePinAssignments {
+  [gpioPin: number]: PinFunction;
+}
 
 interface DeviceConfigurationProps {
   collapsed?: boolean;
@@ -17,17 +21,17 @@ interface DeviceConfigurationProps {
   parsedButtons: ParsedButtonConfig[];
   setParsedAxes: (axes: ParsedAxisConfig[]) => void;
   setParsedButtons: (buttons: ParsedButtonConfig[]) => void;
+  setDevicePinAssignments?: (pinAssignments: DevicePinAssignments | undefined) => void;
 }
 
 export function DeviceConfiguration({ 
   collapsed = false, 
-  parsedAxes, 
-  parsedButtons, 
   setParsedAxes, 
-  setParsedButtons 
+  setParsedButtons,
+  setDevicePinAssignments 
 }: DeviceConfigurationProps) {
   const { connectedDevice, getDeviceStatus, isConnected } = useDeviceContext();
-  const { isLoading: configLoading, error: configError, readConfiguration, clearError } = useDeviceConfigReader();
+  const { isLoading: configLoading, error: configError, readConfigurationWithPins, clearError } = useDeviceConfigWithPins();
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -79,15 +83,25 @@ export function DeviceConfiguration({
     console.log('Reading real configuration from device config.bin...');
     
     try {
-      const config = await readConfiguration();
+      // Load all configuration data in one call
+      const config = await readConfigurationWithPins();
       if (config) {
         setParsedAxes(config.axes);
         setParsedButtons(config.buttons);
         console.log(`Loaded ${config.axes.length} axes and ${config.buttons.length} buttons from config.bin`);
+        
+        // Set pin assignments if callback is provided
+        if (setDevicePinAssignments) {
+          setDevicePinAssignments(config.pinAssignments);
+          console.log(`Loaded ${Object.keys(config.pinAssignments).length} pin assignments from config.bin`);
+        }
       } else {
         // Clear arrays if no config available
         setParsedAxes([]);
         setParsedButtons([]);
+        if (setDevicePinAssignments) {
+          setDevicePinAssignments(undefined);
+        }
         console.warn('No configuration could be read from device');
       }
     } catch (err) {
@@ -95,6 +109,9 @@ export function DeviceConfiguration({
       // Clear arrays on error
       setParsedAxes([]);
       setParsedButtons([]);
+      if (setDevicePinAssignments) {
+        setDevicePinAssignments(undefined);
+      }
     }
   };
 
@@ -107,6 +124,9 @@ export function DeviceConfiguration({
       // Clear current config and reload
       setParsedAxes([]);
       setParsedButtons([]);
+      if (setDevicePinAssignments) {
+        setDevicePinAssignments(undefined);
+      }
       await handleLoadConfiguration();
     } catch (err) {
       console.error('Factory reset failed:', err);

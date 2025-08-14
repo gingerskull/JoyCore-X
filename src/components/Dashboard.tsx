@@ -14,7 +14,11 @@ import { ConfigurationTabs } from './ConfigurationTabs';
 import { FirmwareUpdateDialog } from './FirmwareUpdateDialog';
 import { FirmwareUpdateNotification } from './FirmwareUpdateNotification';
 import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
-import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig } from '@/lib/types';
+import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
+
+interface DevicePinAssignments {
+  [gpioPin: number]: PinFunction;
+}
 
 export function Dashboard() {
   const {
@@ -32,7 +36,7 @@ export function Dashboard() {
     getDeviceStatus
   } = useDeviceContext();
 
-  const { isLoading: configLoading, error: configError, clearError: clearConfigError } = useDeviceConfigReader();
+  const { isLoading: configLoading, clearError: clearConfigError } = useDeviceConfigReader();
 
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -45,6 +49,7 @@ export function Dashboard() {
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null);
   const [parsedAxes, setParsedAxes] = useState<ParsedAxisConfig[]>([]);
   const [parsedButtons, setParsedButtons] = useState<ParsedButtonConfig[]>([]);
+  const [devicePinAssignments, setDevicePinAssignments] = useState<DevicePinAssignments | undefined>(undefined);
 
   // Firmware update state
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
@@ -94,6 +99,7 @@ export function Dashboard() {
       setParsedAxes([]);
       setParsedButtons([]);
       setDeviceStatus(null);
+      setDevicePinAssignments(undefined);
       clearConfigError();
     }
   }, [isConnected, clearConfigError]);
@@ -212,6 +218,7 @@ export function Dashboard() {
               parsedButtons={parsedButtons}
               setParsedAxes={setParsedAxes}
               setParsedButtons={setParsedButtons}
+              setDevicePinAssignments={setDevicePinAssignments}
             />
           ) : (
             <div className="p-3 h-full overflow-y-auto">
@@ -224,6 +231,7 @@ export function Dashboard() {
                 parsedButtons={parsedButtons}
                 setParsedAxes={setParsedAxes}
                 setParsedButtons={setParsedButtons}
+                setDevicePinAssignments={setDevicePinAssignments}
               />
             </div>
           )}
@@ -268,6 +276,7 @@ export function Dashboard() {
                 parsedAxes={parsedAxes}
                 parsedButtons={parsedButtons}
                 isConfigLoading={configLoading}
+                devicePinAssignments={devicePinAssignments}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center">
