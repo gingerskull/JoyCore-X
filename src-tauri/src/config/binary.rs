@@ -334,35 +334,48 @@ impl BinaryConfig {
         let mut configs = Vec::new();
         
         // Extract buttons from logical inputs
-        for (i, logical_input) in self.logical_inputs.iter().enumerate() {
+        for logical_input in self.logical_inputs.iter() {
+            // Map firmware behavior values to function names
+            // From firmware: enum ButtonBehavior { NORMAL=0, MOMENTARY=1, ENC_A=2, ENC_B=3 };
             let function_name = match logical_input.behavior {
                 0 => "normal",
-                1 => "toggle",
-                2 => "macro",
+                1 => "momentary",
+                2 => "encoder_a",
+                3 => "encoder_b",
                 _ => "normal",
             };
 
             let input_type_name = match logical_input.input_type {
-                1 => "Pin",
-                2 => "Matrix", 
-                3 => "Shift Register",
+                0 => "Pin",           // INPUT_PIN
+                1 => "Matrix",        // INPUT_MATRIX
+                2 => "Shift Register", // INPUT_SHIFTREG
                 _ => "Unknown",
             };
 
             // Create descriptive name based on input type
-            let name = if logical_input.input_type == 1 {
-                // For pin inputs, try to find the pin from the data field (now 2 bytes)
-                let pin_data = u16::from_le_bytes(logical_input.data);
-                format!("Button {} ({} Pin {})", logical_input.joy_button_id + 1, input_type_name, pin_data)
-            } else {
-                format!("Button {} ({})", logical_input.joy_button_id + 1, input_type_name)
+            let name = match logical_input.input_type {
+                0 => {
+                    // INPUT_PIN: data[0] contains the pin number
+                    format!("Button {} (Pin {})", logical_input.joy_button_id, logical_input.data[0])
+                },
+                1 => {
+                    // INPUT_MATRIX: data[0]=row, data[1]=col
+                    format!("Button {} (Matrix[{},{}])", logical_input.joy_button_id, logical_input.data[0], logical_input.data[1])
+                },
+                2 => {
+                    // INPUT_SHIFTREG: data[0]=regIndex, data[1]=bitIndex
+                    format!("Button {} (ShiftReg[{}].bit{})", logical_input.joy_button_id, logical_input.data[0], logical_input.data[1])
+                },
+                _ => {
+                    format!("Button {} ({})", logical_input.joy_button_id, input_type_name)
+                }
             };
 
             configs.push(UIButtonConfig {
-                id: i as u8,
+                id: logical_input.joy_button_id,  // Use actual firmware button ID
                 name,
                 function: function_name.to_string(),
-                enabled: logical_input.reverse == 0, // Reverse logic for enabled
+                enabled: true,  // All configured buttons are enabled by default
             });
         }
         

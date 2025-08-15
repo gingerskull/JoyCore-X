@@ -1,8 +1,12 @@
 import { MousePointer } from 'lucide-react';
+import { useState } from 'react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 import type { DeviceStatus, ParsedButtonConfig } from '@/lib/types';
 
@@ -14,31 +18,35 @@ interface ButtonConfigurationProps {
 }
 
 export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedButtons = [], isLoading = false }: ButtonConfigurationProps) {
+  const [buttonStates, setButtonStates] = useState<Record<number, { enabled: boolean; function: string }>>({});
 
-  const getFunctionBadgeVariant = (func: string) => {
-    switch (func) {
-      case 'normal':
-        return 'default';
-      case 'toggle':
-        return 'secondary';
-      case 'macro':
-        return 'outline';
-      default:
-        return 'outline';
-    }
+  const handleEnabledChange = (buttonId: number, checked: boolean) => {
+    const button = parsedButtons.find(b => b.id === buttonId);
+    setButtonStates(prev => ({
+      ...prev,
+      [buttonId]: {
+        enabled: checked,
+        function: prev[buttonId]?.function ?? button?.function ?? 'normal'
+      }
+    }));
   };
 
-  const getFunctionDescription = (func: string) => {
-    switch (func) {
-      case 'normal':
-        return 'Standard momentary button press';
-      case 'toggle':
-        return 'Toggle on/off with each press';
-      case 'macro':
-        return 'Execute custom macro sequence';
-      default:
-        return 'Unknown function';
-    }
+  const handleFunctionChange = (buttonId: number, func: string) => {
+    const button = parsedButtons.find(b => b.id === buttonId);
+    setButtonStates(prev => ({
+      ...prev,
+      [buttonId]: {
+        enabled: prev[buttonId]?.enabled ?? button?.enabled ?? true,
+        function: func
+      }
+    }));
+  };
+
+  const getButtonState = (button: ParsedButtonConfig) => {
+    return buttonStates[button.id] || {
+      enabled: button.enabled,
+      function: button.function
+    };
   };
 
   if (!deviceStatus || !isConnected) {
@@ -93,7 +101,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
   }
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <CardTitle className="flex items-center">
           <MousePointer className="w-5 h-5 mr-2" />
@@ -104,43 +112,93 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {parsedButtons.map((button) => (
-            <Card key={button.id} className="p-4">
-              <div className="space-y-4">
-                {/* Button Header */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <MousePointer className="w-4 h-4" />
-                    <span className="font-medium">{button.name}</span>
-                  </div>
-                  <Badge variant={getFunctionBadgeVariant(button.function)}>
-                    {button.function}
-                  </Badge>
-                </div>
-
-                {/* Button Configuration Display (Read-only) */}
-                <div className="bg-muted/50 p-3 rounded-lg space-y-2">
-                  <h4 className="font-medium text-sm">Configuration from Device</h4>
-                  
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">ID</Label>
-                      <p className="font-mono">{button.id}</p>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Enabled</Label>
-                      <p className="font-mono">{button.enabled ? 'Yes' : 'No'}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-xs text-muted-foreground">Function</Label>
-                      <p className="text-sm">{getFunctionDescription(button.function)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ))}
+        <div className="flex h-[600px] gap-4">
+          {/* Left half - placeholder for future button details */}
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <p>Select a button to configure</p>
+          </div>
+          
+          {/* Vertical separator */}
+          <Separator orientation="vertical" className="h-full" />
+          
+          {/* Right half - scrollable button list */}
+          <div className="flex-1">
+            <ScrollArea className="h-full pr-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[40px]">On</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="w-[50px]">ID</TableHead>
+                  <TableHead className="w-[120px]">Function</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {parsedButtons.map((button) => {
+                  const state = getButtonState(button);
+                  return (
+                    <TableRow 
+                      key={button.id} 
+                      className={!state.enabled ? 'opacity-50' : ''}
+                    >
+                      <TableCell className="p-2">
+                        <Checkbox
+                          checked={state.enabled}
+                          onCheckedChange={(checked) => handleEnabledChange(button.id, checked as boolean)}
+                          disabled={!isConnected}
+                          className="h-4 w-4 rounded-sm"
+                        />
+                      </TableCell>
+                      <TableCell className="p-2">
+                        <div className="text-sm">{button.name}</div>
+                      </TableCell>
+                      <TableCell className="p-2">
+                        <div className="bg-muted border rounded p-1 min-w-[2rem] flex items-center justify-center">
+                          <span className="text-xs font-mono font-medium text-muted-foreground">
+                            {button.id}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="p-2">
+                        <Select
+                          value={state.function}
+                          onValueChange={(value) => handleFunctionChange(button.id, value)}
+                          disabled={!state.enabled || !isConnected}
+                        >
+                          <SelectTrigger size="xs" className="w-36">
+                            <SelectValue>
+                              <span className="text-xs font-mono">
+                                {state.function === 'normal' ? 'Normal' :
+                                 state.function === 'momentary' ? 'Momentary' :
+                                 state.function === 'encoder_a' ? 'Encoder A' :
+                                 state.function === 'encoder_b' ? 'Encoder B' :
+                                 state.function}
+                              </span>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="normal">
+                              <span className="text-xs font-mono">Normal</span>
+                            </SelectItem>
+                            <SelectItem value="momentary">
+                              <span className="text-xs font-mono">Momentary</span>
+                            </SelectItem>
+                            <SelectItem value="encoder_a">
+                              <span className="text-xs font-mono">Encoder A</span>
+                            </SelectItem>
+                            <SelectItem value="encoder_b">
+                              <span className="text-xs font-mono">Encoder B</span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            </ScrollArea>
+          </div>
         </div>
       </CardContent>
     </Card>

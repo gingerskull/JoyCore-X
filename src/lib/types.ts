@@ -125,9 +125,9 @@ export interface ParsedAxisConfig {
 }
 
 export interface ParsedButtonConfig {
-  id: number;
-  name: string;
-  function: string;
+  id: number;      // The actual joyButtonID from firmware
+  name: string;     // Descriptive name including source (Pin/Matrix/ShiftReg)
+  function: 'normal' | 'momentary' | 'encoder_a' | 'encoder_b';  // Firmware behavior values
   enabled: boolean;
 }
 

@@ -94,3 +94,6 @@ coverage/
 *.tsbuildinfo
 .eslintcache
 .stylelintcache
+
+CLAUDE.md
+.claude/
