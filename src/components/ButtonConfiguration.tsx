@@ -17,6 +17,48 @@ interface ButtonConfigurationProps {
   isLoading?: boolean;
 }
 
+interface ParsedButtonInfo {
+  type: 'direct' | 'shiftreg' | 'matrix';
+  label: string;
+}
+
+function parseButtonName(name: string): ParsedButtonInfo {
+  // Based on actual backend formats from src-tauri/src/config/binary.rs:
+  
+  // Direct pin pattern: "Button X (pin Y)" or "Button X (Pin Y)" - case insensitive
+  const directPinMatch = name.match(/Button\s+\d+\s+\([Pp]in\s+(\d+)\)/);
+  if (directPinMatch) {
+    return {
+      type: 'direct',
+      label: `Direct ${directPinMatch[1]}`
+    };
+  }
+
+  // Shift Register pattern: "Button X (ShiftReg[Y].bitZ)"
+  const shiftRegMatch = name.match(/Button\s+\d+\s+\(ShiftReg\[(\d+)\]\.bit(\d+)\)/);
+  if (shiftRegMatch) {
+    return {
+      type: 'shiftreg',
+      label: `ShiftReg ${shiftRegMatch[1]}-${shiftRegMatch[2]}`
+    };
+  }
+
+  // Matrix pattern: "Button X (Matrix[Y,Z])"
+  const matrixMatch = name.match(/Button\s+\d+\s+\(Matrix\[(\d+),(\d+)\]\)/);
+  if (matrixMatch) {
+    return {
+      type: 'matrix',
+      label: `Matrix ${matrixMatch[1]}x${matrixMatch[2]}`
+    };
+  }
+
+  // Fallback - if we can't parse, return the original name
+  return {
+    type: 'direct',
+    label: name
+  };
+}
+
 export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedButtons = [], isLoading = false }: ButtonConfigurationProps) {
   const [buttonStates, setButtonStates] = useState<Record<number, { enabled: boolean; function: string }>>({});
 
@@ -123,17 +165,17 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
           
           {/* Right half - scrollable button list */}
           <div className="flex-1">
-            <ScrollArea className="h-full pr-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[40px]">On</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="w-[50px]">ID</TableHead>
-                  <TableHead className="w-[120px]">Function</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <ScrollArea className="h-full">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[40px]">On</TableHead>
+                    <TableHead>Physical Button</TableHead>
+                    <TableHead className="w-[50px]">ID</TableHead>
+                    <TableHead className="w-[120px]">Function</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                 {parsedButtons.map((button) => {
                   const state = getButtonState(button);
                   return (
@@ -146,11 +188,42 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                           checked={state.enabled}
                           onCheckedChange={(checked) => handleEnabledChange(button.id, checked as boolean)}
                           disabled={!isConnected}
-                          className="h-4 w-4 rounded-sm"
+                          className="h-4 w-4 rounded"
                         />
                       </TableCell>
                       <TableCell className="p-2">
-                        <div className="text-sm">{button.name}</div>
+                        {(() => {
+                          const buttonInfo = parseButtonName(button.name);
+                          
+                          // Define colors based on button type
+                          const colorClasses = {
+                            direct: {
+                              bg: 'bg-blue-50',
+                              border: 'border-blue-200',
+                              text: 'text-blue-700'
+                            },
+                            shiftreg: {
+                              bg: 'bg-green-50',
+                              border: 'border-green-200',
+                              text: 'text-green-700'
+                            },
+                            matrix: {
+                              bg: 'bg-purple-50',
+                              border: 'border-purple-200',
+                              text: 'text-purple-700'
+                            }
+                          };
+                          
+                          const colors = colorClasses[buttonInfo.type] || colorClasses.direct;
+                          
+                          return (
+                            <div className={`${colors.bg} border ${colors.border} rounded p-1 min-w-[100px] flex items-center justify-center`}>
+                              <span className={`text-xs font-mono font-medium ${colors.text}`}>
+                                {buttonInfo.label}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="p-2">
                         <div className="bg-muted border rounded p-1 min-w-[2rem] flex items-center justify-center">
@@ -165,7 +238,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                           onValueChange={(value) => handleFunctionChange(button.id, value)}
                           disabled={!state.enabled || !isConnected}
                         >
-                          <SelectTrigger size="xs" className="w-36">
+                          <SelectTrigger size="xs" className="w-[120px]">
                             <SelectValue>
                               <span className="text-xs font-mono">
                                 {state.function === 'normal' ? 'Normal' :
@@ -195,8 +268,8 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                     </TableRow>
                   );
                 })}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
             </ScrollArea>
           </div>
         </div>

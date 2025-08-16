@@ -39,11 +39,7 @@ export function Dashboard() {
   const { isLoading: configLoading, clearError: clearConfigError } = useDeviceConfigReader();
 
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-    // Load saved preference from localStorage
-    const saved = localStorage.getItem('joycore-sidebar-collapsed');
-    return saved ? JSON.parse(saved) : false;
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
 
   // Device configuration state
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null);
@@ -122,9 +118,7 @@ export function Dashboard() {
   }, [refreshDevicesSilently, isConnected]);
 
   const toggleSidebar = useCallback(() => {
-    const newState = !sidebarCollapsed;
-    setSidebarCollapsed(newState);
-    localStorage.setItem('joycore-sidebar-collapsed', JSON.stringify(newState));
+    setSidebarCollapsed(!sidebarCollapsed);
   }, [sidebarCollapsed]);
 
   // Keyboard shortcut for sidebar toggle (Ctrl+B)

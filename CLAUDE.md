@@ -462,6 +462,5 @@ This framework provides expert-level guidance that adapts naturally to your conv
 - Improves confidence level assessments
 
 ### Debugging
-- Check `DEVELOPMENT_STATUS.md` for current implementation status
 - Review firmware protocol in ConfigProtocol.h from firmware repo
 - Use Qt Creator or VS Code with CMake extensions for development
