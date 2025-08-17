@@ -12,6 +12,7 @@ import { CollapsedSidebar } from './CollapsedSidebar';
 import { ConfigurationTabs } from './ConfigurationTabs';
 import { FirmwareUpdateDialog } from './FirmwareUpdateDialog';
 import { FirmwareUpdateNotification } from './FirmwareUpdateNotification';
+import { TitleBar } from './TitleBar';
 import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
 import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
 
@@ -161,7 +162,10 @@ export function Dashboard() {
 
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex flex-col h-screen bg-background">
+      {/* Custom Title Bar */}
+      <TitleBar />
+      
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
