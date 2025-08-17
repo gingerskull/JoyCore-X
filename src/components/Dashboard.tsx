@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, Gamepad2, AlertCircle, Download } from 'lucide-react';
+import { RefreshCw, Gamepad2, AlertCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 
@@ -163,49 +162,7 @@ export function Dashboard() {
 
 
   return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
-      <div className="border-b">
-        <div className="flex h-16 items-center px-6">
-          <div className="flex items-center space-x-2">
-            <Gamepad2 className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">JoyCore-X</h1>
-            <Badge variant="outline" className="ml-2">v0.1.0</Badge>
-          </div>
-          
-          <div className="ml-auto flex items-center space-x-4">
-            {/* Firmware update button (only show when connected to a device) */}
-            {isConnected && currentFirmwareVersion && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleUpdateDialogOpen}
-                disabled={isCheckingUpdates}
-                className={hasUpdateAvailable ? "border-blue-500 bg-blue-50 hover:bg-blue-100" : ""}
-              >
-                <Download className={`w-4 h-4 mr-2 ${isCheckingUpdates ? 'animate-pulse' : ''}`} />
-                {hasUpdateAvailable ? 'Update Available' : 'Check Updates'}
-                {hasUpdateAvailable && (
-                  <Badge variant="secondary" className="ml-2 bg-blue-500 text-white">
-                    {latestVersion}
-                  </Badge>
-                )}
-              </Button>
-            )}
-            
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isLoading}
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-          </div>
-        </div>
-      </div>
-
+    <div className="flex h-screen bg-background">
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
@@ -218,6 +175,7 @@ export function Dashboard() {
               setParsedAxes={setParsedAxes}
               setParsedButtons={setParsedButtons}
               setDevicePinAssignments={setDevicePinAssignments}
+              onUpdateDialogOpen={handleUpdateDialogOpen}
             />
           ) : (
             <div className="p-3 h-full overflow-y-auto">
@@ -231,6 +189,7 @@ export function Dashboard() {
                 setParsedAxes={setParsedAxes}
                 setParsedButtons={setParsedButtons}
                 setDevicePinAssignments={setDevicePinAssignments}
+                onUpdateDialogOpen={handleUpdateDialogOpen}
               />
             </div>
           )}

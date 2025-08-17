@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Usb, Wifi, WifiOff, AlertTriangle, CheckCircle2, Loader2, RefreshCw, PanelLeftClose } from 'lucide-react';
+import { Usb, Wifi, WifiOff, AlertTriangle, CheckCircle2, Loader2, RefreshCw, PanelLeftClose, Gamepad2, Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceConfiguration } from './DeviceConfiguration';
+import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
 import type { Device, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
 
 interface DevicePinAssignments {
@@ -25,9 +26,10 @@ interface DeviceListProps {
   setParsedAxes: (axes: ParsedAxisConfig[]) => void;
   setParsedButtons: (buttons: ParsedButtonConfig[]) => void;
   setDevicePinAssignments?: (pinAssignments: DevicePinAssignments | undefined) => void;
+  onUpdateDialogOpen: () => void;
 }
 
-export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRefreshing, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons, setDevicePinAssignments }: DeviceListProps) {
+export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRefreshing, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons, setDevicePinAssignments, onUpdateDialogOpen }: DeviceListProps) {
   const {
     devices,
     connectedDevice,
@@ -41,6 +43,19 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
   } = useDeviceContext();
 
   const [connectingToId, setConnectingToId] = useState<string | null>(null);
+
+  // Get current firmware version from connected device
+  const currentFirmwareVersion = connectedDevice?.device_status?.firmware_version;
+
+  // Use firmware update hook
+  const {
+    isChecking: isCheckingUpdates,
+    hasUpdateAvailable,
+    latestVersion,
+  } = useFirmwareUpdates({
+    currentVersion: currentFirmwareVersion,
+    autoCheck: true,
+  });
 
   const handleConnect = async (deviceId: string) => {
     setConnectingToId(deviceId);
@@ -115,6 +130,37 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
 
   return (
     <div className="space-y-3">
+      {/* Header Section */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-center space-x-2">
+            <Gamepad2 className="h-6 w-6" />
+            <h1 className="text-xl font-semibold">JoyCore-X</h1>
+            <Badge variant="outline" className="ml-2">v0.1.0</Badge>
+          </div>
+        </CardHeader>
+        {isConnected && currentFirmwareVersion && (
+          <CardContent className="pt-0">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={onUpdateDialogOpen}
+              disabled={isCheckingUpdates}
+              className={`w-full ${hasUpdateAvailable ? "border-blue-500 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/20 dark:hover:bg-blue-950/30" : ""}`}
+            >
+              <Download className={`w-4 h-4 mr-2 ${isCheckingUpdates ? 'animate-pulse' : ''}`} />
+              {hasUpdateAvailable ? 'Update Available' : 'Check Updates'}
+              {hasUpdateAvailable && (
+                <Badge variant="secondary" className="ml-2 bg-blue-500 text-white">
+                  {latestVersion}
+                </Badge>
+              )}
+            </Button>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Devices Card */}
       <Card>
         <CardHeader className="pb-3">
           
