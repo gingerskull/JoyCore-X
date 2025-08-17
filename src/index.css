@@ -174,3 +174,69 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Global Interactive Hover Classes */
+  .hover-card {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+  
+  .hover-card:hover {
+    background-color: oklch(var(--accent) / 0.5);
+  }
+  
+  .dark .hover-card:hover {
+    background-color: oklch(var(--accent) / 0.3);
+  }
+  
+  .hover-list-item {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+  
+  .hover-list-item:hover {
+    background-color: oklch(var(--accent));
+  }
+  
+  .dark .hover-list-item:hover {
+    background-color: oklch(var(--accent) / 0.5);
+  }
+  
+  .hover-table-row {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+  
+  .hover-table-row:hover {
+    background-color: oklch(var(--muted) / 0.5);
+  }
+  
+  .dark .hover-table-row:hover {
+    background-color: oklch(var(--muted) / 0.3);
+  }
+  
+  /* Non-interactive text defaults */
+  .text-non-interactive {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    cursor: default;
+  }
+  
+  /* Interactive element defaults */
+  .interactive-element {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    cursor: pointer;
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+}
