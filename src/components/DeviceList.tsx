@@ -217,7 +217,7 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
           {devices.length === 0 ? (
             <div className="text-center py-8">
               <Usb className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground mb-3">
+              <p className="text-sm text-muted-foreground mb-3 select-none">
                 No JoyCore devices found
               </p>
               <Button 
@@ -249,7 +249,7 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           {getDeviceStatusIcon(device, isDeviceConnected)}
-                          <span className="font-medium text-sm truncate">
+                          <span className="font-medium text-sm truncate select-none">
                             {device.product || 'JoyCore Device'}
                           </span>
                         </div>
@@ -257,27 +257,27 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
                       </div>
                       
                       {/* Port Row */}
-                      <div className="text-xs text-muted-foreground truncate">
+                      <div className="text-xs text-muted-foreground truncate select-none">
                         <span className="font-medium">Port:</span> {device.port_name}
                       </div>
                       
                       {/* Serial Number Row */}
                       {device.serial_number && (
-                        <div className="text-xs text-muted-foreground truncate">
+                        <div className="text-xs text-muted-foreground truncate select-none">
                           <span className="font-medium">Serial:</span> {device.serial_number}
                         </div>
                       )}
                       
                       {/* Firmware Row */}
                       {device.device_status && (
-                        <div className="text-xs text-muted-foreground truncate">
+                        <div className="text-xs text-muted-foreground truncate select-none">
                           <span className="font-medium">FW:</span> {device.device_status.firmware_version}
                         </div>
                       )}
                       
                       {/* Buttons & Axes Row */}
                       {device.device_status && (
-                        <div className="text-xs text-muted-foreground truncate">
+                        <div className="text-xs text-muted-foreground truncate select-none">
                           <span className="font-medium">Controls:</span> {device.device_status.axes_count}A, {device.device_status.buttons_count}B
                         </div>
                       )}
@@ -296,7 +296,7 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
           {devices.length > 0 && (
             <>
               <Separator className="my-3" />
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-muted-foreground select-none">
                 Connect your device via USB and ensure it's in configuration mode.
               </div>
             </>

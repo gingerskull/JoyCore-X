@@ -147,8 +147,10 @@ export function DeviceConfigManagement() {
           <Alert className="mb-4">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              Note: The firmware currently has limited file system support. 
-              Export/Import features require firmware updates to work properly.
+              <span className="select-none">
+                Note: The firmware currently has limited file system support. 
+                Export/Import features require firmware updates to work properly.
+              </span>
             </AlertDescription>
           </Alert>
 
@@ -229,31 +231,31 @@ export function DeviceConfigManagement() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Used Space</span>
-                <span>{storageInfo.used_bytes} / {storageInfo.total_bytes} bytes</span>
+                <span className="select-none">Used Space</span>
+                <span className="select-none">{storageInfo.used_bytes} / {storageInfo.total_bytes} bytes</span>
               </div>
               <Progress value={storageUsagePercent} />
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-muted-foreground">Available Space</p>
-                <p className="font-medium">{storageInfo.available_bytes} bytes</p>
+                <p className="text-muted-foreground select-none">Available Space</p>
+                <p className="font-medium select-none">{storageInfo.available_bytes} bytes</p>
               </div>
               <div>
-                <p className="text-muted-foreground">File Count</p>
-                <p className="font-medium">{storageInfo.file_count} / {storageInfo.max_files}</p>
+                <p className="text-muted-foreground select-none">File Count</p>
+                <p className="font-medium select-none">{storageInfo.file_count} / {storageInfo.max_files}</p>
               </div>
             </div>
 
             {files.length > 0 && (
               <div>
-                <p className="text-sm font-medium mb-2">Files on Device:</p>
+                <p className="text-sm font-medium mb-2 select-none">Files on Device:</p>
                 <div className="space-y-1">
                   {files.map((file) => (
                     <div key={file} className="flex items-center gap-2 text-sm">
                       <FileText className="h-3 w-3" />
-                      <span className="font-mono">{file}</span>
+                      <span className="font-mono select-text">{file}</span>
                     </div>
                   ))}
                 </div>
