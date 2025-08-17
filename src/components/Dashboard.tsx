@@ -56,7 +56,6 @@ export function Dashboard() {
 
   // Use firmware update hook
   const {
-    isChecking: isCheckingUpdates,
     hasUpdateAvailable,
     latestVersion,
   } = useFirmwareUpdates({

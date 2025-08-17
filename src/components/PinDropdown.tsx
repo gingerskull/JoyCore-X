@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import type { PinFunction, PinConfiguration } from '@/lib/types';
 
 interface PinDropdownProps {
@@ -19,9 +20,9 @@ export function PinDropdown({ pinConfig, onFunctionChange, size = 'xs' }: PinDro
 
   if (!isConfigurable) {
     return (
-      <div className="p-1 text-xs font-mono text-muted-foreground bg-muted rounded">
+      <Badge variant="secondary" className="font-mono">
         {pinConfig.defaultLabel}
-      </div>
+      </Badge>
     );
   }
 
@@ -116,33 +117,33 @@ export function PinDropdown({ pinConfig, onFunctionChange, size = 'xs' }: PinDro
     }
   };
 
-  const getFunctionColor = (func: PinFunction): string => {
-    if (func === 'PIN_UNUSED') return 'text-muted-foreground';
-    if (func.startsWith('BTN')) return 'text-blue-600';
-    if (func.startsWith('SHIFTREG')) return 'text-purple-600';
-    if (func === 'ANALOG_AXIS') return 'text-green-600';
-    if (func.startsWith('SPI')) return 'text-orange-600';
-    if (func.startsWith('I2C')) return 'text-red-600';
-    if (func.startsWith('UART')) return 'text-yellow-600';
-    if (func.startsWith('PWM')) return 'text-pink-600';
-    return 'text-foreground';
+  const getFunctionBadgeVariant = (func: PinFunction): "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "info" | "yellow" | "pink" | "blue" | "purple" | "teal" => {
+    if (func === 'PIN_UNUSED') return 'secondary';
+    if (func.startsWith('BTN')) return 'blue';
+    if (func.startsWith('SHIFTREG')) return 'purple';
+    if (func === 'ANALOG_AXIS') return 'teal';
+    if (func.startsWith('SPI')) return 'outline';
+    if (func.startsWith('I2C')) return 'destructive';
+    if (func.startsWith('UART')) return 'yellow';
+    if (func.startsWith('PWM')) return 'pink';
+    return 'default';
   };
 
   return (
     <Select value={currentFunction} onValueChange={handleValueChange}>
-      <SelectTrigger size={size} className={`w-36 ${getFunctionColor(currentFunction)}`}>
+      <SelectTrigger size={size} className="w-36">
         <SelectValue>
-          <span className="text-xs font-mono">
+          <Badge variant={getFunctionBadgeVariant(currentFunction)} className="font-mono text-xs">
             {getFunctionDisplayName(currentFunction)}
-          </span>
+          </Badge>
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {availableFunctions.map((func) => (
           <SelectItem key={func} value={func}>
-            <span className={`text-xs font-mono ${getFunctionColor(func)}`}>
+            <Badge variant={getFunctionBadgeVariant(func)} className="font-mono text-xs">
               {getFunctionDisplayName(func)}
-            </span>
+            </Badge>
           </SelectItem>
         ))}
       </SelectContent>

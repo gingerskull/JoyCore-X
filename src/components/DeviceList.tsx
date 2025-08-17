@@ -72,18 +72,34 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
 
   const getDeviceStatusIcon = (device: Device, isConnected: boolean) => {
     if (isConnected) {
-      return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+      return <CheckCircle2 className="h-4 w-4" />;
     }
     
     const state = device.connection_state;
     
     if (state === 'Connecting' || (connectingToId === device.id)) {
-      return <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />;
+      return <Loader2 className="h-4 w-4 animate-spin" />;
     } else if (typeof state === 'object' && 'Error' in state) {
-      return <AlertTriangle className="h-4 w-4 text-red-600" />;
+      return <AlertTriangle className="h-4 w-4" />;
     }
     
-    return <WifiOff className="h-4 w-4 text-gray-400" />;
+    return <WifiOff className="h-4 w-4" />;
+  };
+  
+  const getDeviceStatusBadge = (device: Device, isConnected: boolean) => {
+    if (isConnected) {
+      return <Badge variant="success">Connected</Badge>;
+    }
+    
+    const state = device.connection_state;
+    
+    if (state === 'Connecting' || (connectingToId === device.id)) {
+      return <Badge variant="info" className="animate-pulse">...</Badge>;
+    } else if (typeof state === 'object' && 'Error' in state) {
+      return <Badge variant="destructive">Error</Badge>;
+    }
+    
+    return <Badge variant="secondary">Discon</Badge>;
   };
 
   const getConnectionAction = (device: Device, isDeviceConnected: boolean) => {
@@ -146,12 +162,12 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
               size="sm"
               onClick={onUpdateDialogOpen}
               disabled={isCheckingUpdates}
-              className={`w-full ${hasUpdateAvailable ? "border-blue-500 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/20 dark:hover:bg-blue-950/30" : ""}`}
+              className={`w-full ${hasUpdateAvailable ? "border-warning/50 bg-warning/10 hover:bg-warning/20" : ""}`}
             >
               <Download className={`w-4 h-4 mr-2 ${isCheckingUpdates ? 'animate-pulse' : ''}`} />
               {hasUpdateAvailable ? 'Update Available' : 'Check Updates'}
               {hasUpdateAvailable && (
-                <Badge variant="secondary" className="ml-2 bg-blue-500 text-white">
+                <Badge variant="yellow" className="ml-2">
                   {latestVersion}
                 </Badge>
               )}
@@ -225,21 +241,19 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
                       key={device.id}
                       className={`p-4 rounded-lg border transition-colors space-y-3 ${
                         isDeviceConnected 
-                          ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' 
+                          ? 'border-border bg-primary/25' 
                           : 'border-border hover:bg-muted/50'
                       }`}
                     >
                       {/* Device Name Row */}
-                      <div className="flex items-center space-x-2">
-                        {getDeviceStatusIcon(device, isDeviceConnected)}
-                        <span className="font-medium text-sm flex-1 truncate">
-                          {device.product || 'JoyCore Device'}
-                        </span>
-                        {isDeviceConnected && (
-                          <Badge variant="default" className="text-xs px-1 py-0 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex-shrink-0">
-                            Active
-                          </Badge>
-                        )}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          {getDeviceStatusIcon(device, isDeviceConnected)}
+                          <span className="font-medium text-sm truncate">
+                            {device.product || 'JoyCore Device'}
+                          </span>
+                        </div>
+                        {getDeviceStatusBadge(device, isDeviceConnected)}
                       </div>
                       
                       {/* Port Row */}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { PinDropdown } from './PinDropdown';
+import { Badge } from '@/components/ui/badge';
 import type { PinConfiguration, PinFunction } from '@/lib/types';
 
 interface PicoSVGProps {
@@ -101,24 +102,18 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
                       size="xs"
                     />
                     {pinConfig.gpioNumber !== undefined && (
-                      <div className="bg-blue-50 border border-blue-200 rounded p-1 min-w-[2.5rem] flex items-center justify-center">
-                        <span className="text-xs font-mono font-medium text-blue-700">
-                          GP{pinConfig.gpioNumber}
-                        </span>
-                      </div>
+                      <Badge variant="blue" className="font-mono min-w-[2.5rem] text-center">
+                        GP{pinConfig.gpioNumber}
+                      </Badge>
                     )}
-                    <div className="bg-muted border rounded p-1 min-w-[2rem] flex items-center justify-center">
-                      <span className="text-xs font-mono font-medium text-muted-foreground">
-                        {pin}
-                      </span>
-                    </div>
+                    <Badge variant="info" className="font-mono min-w-[2rem] text-center">
+                      {pin}
+                    </Badge>
                   </>
                 ) : (
-                  <div className="bg-muted border rounded p-1 min-w-[5rem] flex items-center justify-center">
-                    <span className="text-xs font-mono font-medium text-muted-foreground">
-                      {pinConfig?.defaultLabel || `Pin ${pin}`}
-                    </span>
-                  </div>
+                  <Badge variant="secondary" className="font-mono min-w-[5rem] text-center">
+                    {pinConfig?.defaultLabel || `Pin ${pin}`}
+                  </Badge>
                 )}
               </div>
             </div>
@@ -143,17 +138,13 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
               <div className="flex items-center space-x-2">
                 {isConfigurable ? (
                   <>
-                    <div className="bg-muted border rounded p-1 min-w-[2rem] flex items-center justify-center">
-                      <span className="text-xs font-mono font-medium text-muted-foreground">
-                        {pin}
-                      </span>
-                    </div>
+                    <Badge variant="info" className="font-mono min-w-[2rem] text-center">
+                      {pin}
+                    </Badge>
                     {pinConfig.gpioNumber !== undefined && (
-                      <div className="bg-blue-50 border border-blue-200 rounded p-1 min-w-[2.5rem] flex items-center justify-center">
-                        <span className="text-xs font-mono font-medium text-blue-700">
-                          GP{pinConfig.gpioNumber}
-                        </span>
-                      </div>
+                      <Badge variant="blue" className="font-mono min-w-[2.5rem] text-center">
+                        GP{pinConfig.gpioNumber}
+                      </Badge>
                     )}
                     <PinDropdown
                       pinConfig={pinConfig}
@@ -162,11 +153,9 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
                     />
                   </>
                 ) : (
-                  <div className="bg-muted border rounded p-1 min-w-[5rem] flex items-center justify-center">
-                    <span className="text-xs font-mono font-medium text-muted-foreground">
-                      {pinConfig?.defaultLabel || `Pin ${pin}`}
-                    </span>
-                  </div>
+                  <Badge variant="secondary" className="font-mono min-w-[5rem] text-center">
+                    {pinConfig?.defaultLabel || `Pin ${pin}`}
+                  </Badge>
                 )}
               </div>
             </div>
