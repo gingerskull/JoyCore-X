@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Usb, Wifi, WifiOff, AlertTriangle, CheckCircle2, Loader2, RefreshCw, PanelLeftClose } from 'lucide-react';
+import { Usb, Wifi, WifiOff, AlertTriangle, CheckCircle2, Loader2, RefreshCw, PanelLeftClose, Gamepad2, Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceConfiguration } from './DeviceConfiguration';
+import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
 import type { Device, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
 
 interface DevicePinAssignments {
@@ -25,9 +26,10 @@ interface DeviceListProps {
   setParsedAxes: (axes: ParsedAxisConfig[]) => void;
   setParsedButtons: (buttons: ParsedButtonConfig[]) => void;
   setDevicePinAssignments?: (pinAssignments: DevicePinAssignments | undefined) => void;
+  onUpdateDialogOpen: () => void;
 }
 
-export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRefreshing, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons, setDevicePinAssignments }: DeviceListProps) {
+export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRefreshing, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons, setDevicePinAssignments, onUpdateDialogOpen }: DeviceListProps) {
   const {
     devices,
     connectedDevice,
@@ -41,6 +43,19 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
   } = useDeviceContext();
 
   const [connectingToId, setConnectingToId] = useState<string | null>(null);
+
+  // Get current firmware version from connected device
+  const currentFirmwareVersion = connectedDevice?.device_status?.firmware_version;
+
+  // Use firmware update hook
+  const {
+    isChecking: isCheckingUpdates,
+    hasUpdateAvailable,
+    latestVersion,
+  } = useFirmwareUpdates({
+    currentVersion: currentFirmwareVersion,
+    autoCheck: true,
+  });
 
   const handleConnect = async (deviceId: string) => {
     setConnectingToId(deviceId);
@@ -57,18 +72,34 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
 
   const getDeviceStatusIcon = (device: Device, isConnected: boolean) => {
     if (isConnected) {
-      return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+      return <CheckCircle2 className="h-4 w-4" />;
     }
     
     const state = device.connection_state;
     
     if (state === 'Connecting' || (connectingToId === device.id)) {
-      return <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />;
+      return <Loader2 className="h-4 w-4 animate-spin" />;
     } else if (typeof state === 'object' && 'Error' in state) {
-      return <AlertTriangle className="h-4 w-4 text-red-600" />;
+      return <AlertTriangle className="h-4 w-4" />;
     }
     
-    return <WifiOff className="h-4 w-4 text-gray-400" />;
+    return <WifiOff className="h-4 w-4" />;
+  };
+  
+  const getDeviceStatusBadge = (device: Device, isConnected: boolean) => {
+    if (isConnected) {
+      return <Badge variant="success">Connected</Badge>;
+    }
+    
+    const state = device.connection_state;
+    
+    if (state === 'Connecting' || (connectingToId === device.id)) {
+      return <Badge variant="info" className="animate-pulse">...</Badge>;
+    } else if (typeof state === 'object' && 'Error' in state) {
+      return <Badge variant="destructive">Error</Badge>;
+    }
+    
+    return <Badge variant="secondary">Discon</Badge>;
   };
 
   const getConnectionAction = (device: Device, isDeviceConnected: boolean) => {
@@ -115,6 +146,37 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
 
   return (
     <div className="space-y-3">
+      {/* Header Section */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-center space-x-2">
+            <Gamepad2 className="h-6 w-6" />
+            <h1 className="text-xl font-semibold">JoyCore-X</h1>
+            <Badge variant="outline" className="ml-2">v0.1.0</Badge>
+          </div>
+        </CardHeader>
+        {isConnected && currentFirmwareVersion && (
+          <CardContent className="pt-0">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={onUpdateDialogOpen}
+              disabled={isCheckingUpdates}
+              className={`w-full ${hasUpdateAvailable ? "border-warning/50 bg-warning/10 hover:bg-warning/20" : ""}`}
+            >
+              <Download className={`w-4 h-4 mr-2 ${isCheckingUpdates ? 'animate-pulse' : ''}`} />
+              {hasUpdateAvailable ? 'Update Available' : 'Check Updates'}
+              {hasUpdateAvailable && (
+                <Badge variant="yellow" className="ml-2">
+                  {latestVersion}
+                </Badge>
+              )}
+            </Button>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Devices Card */}
       <Card>
         <CardHeader className="pb-3">
           
@@ -155,7 +217,7 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
           {devices.length === 0 ? (
             <div className="text-center py-8">
               <Usb className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground mb-3">
+              <p className="text-sm text-muted-foreground mb-3 select-none">
                 No JoyCore devices found
               </p>
               <Button 
@@ -179,45 +241,43 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
                       key={device.id}
                       className={`p-4 rounded-lg border transition-colors space-y-3 ${
                         isDeviceConnected 
-                          ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' 
+                          ? 'border-border bg-primary/25' 
                           : 'border-border hover:bg-muted/50'
                       }`}
                     >
                       {/* Device Name Row */}
-                      <div className="flex items-center space-x-2">
-                        {getDeviceStatusIcon(device, isDeviceConnected)}
-                        <span className="font-medium text-sm flex-1 truncate">
-                          {device.product || 'JoyCore Device'}
-                        </span>
-                        {isDeviceConnected && (
-                          <Badge variant="default" className="text-xs px-1 py-0 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex-shrink-0">
-                            Active
-                          </Badge>
-                        )}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          {getDeviceStatusIcon(device, isDeviceConnected)}
+                          <span className="font-medium text-sm truncate select-none">
+                            {device.product || 'JoyCore Device'}
+                          </span>
+                        </div>
+                        {getDeviceStatusBadge(device, isDeviceConnected)}
                       </div>
                       
                       {/* Port Row */}
-                      <div className="text-xs text-muted-foreground truncate">
+                      <div className="text-xs text-muted-foreground truncate select-none">
                         <span className="font-medium">Port:</span> {device.port_name}
                       </div>
                       
                       {/* Serial Number Row */}
                       {device.serial_number && (
-                        <div className="text-xs text-muted-foreground truncate">
+                        <div className="text-xs text-muted-foreground truncate select-none">
                           <span className="font-medium">Serial:</span> {device.serial_number}
                         </div>
                       )}
                       
                       {/* Firmware Row */}
                       {device.device_status && (
-                        <div className="text-xs text-muted-foreground truncate">
+                        <div className="text-xs text-muted-foreground truncate select-none">
                           <span className="font-medium">FW:</span> {device.device_status.firmware_version}
                         </div>
                       )}
                       
                       {/* Buttons & Axes Row */}
                       {device.device_status && (
-                        <div className="text-xs text-muted-foreground truncate">
+                        <div className="text-xs text-muted-foreground truncate select-none">
                           <span className="font-medium">Controls:</span> {device.device_status.axes_count}A, {device.device_status.buttons_count}B
                         </div>
                       )}
@@ -236,7 +296,7 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
           {devices.length > 0 && (
             <>
               <Separator className="my-3" />
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-muted-foreground select-none">
                 Connect your device via USB and ensure it's in configuration mode.
               </div>
             </>

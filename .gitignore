@@ -95,5 +95,5 @@ coverage/
 .eslintcache
 .stylelintcache
 
-CLAUDE.md
-.claude/
+context
+.claude

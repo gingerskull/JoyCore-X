@@ -125,7 +125,7 @@ export function ProfileManagement({ deviceStatus }: ProfileManagementProps) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-8">
-          <p className="text-muted-foreground">No device connected</p>
+          <p className="text-muted-foreground select-none">No device connected</p>
         </CardContent>
       </Card>
     );
@@ -218,8 +218,8 @@ export function ProfileManagement({ deviceStatus }: ProfileManagementProps) {
           {!profileManager || profileManager.profiles.length === 0 ? (
             <div className="text-center py-8">
               <User className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-medium mb-2">No Profiles Yet</h3>
-              <p className="text-muted-foreground mb-4">
+              <h3 className="text-lg font-medium mb-2 select-none">No Profiles Yet</h3>
+              <p className="text-muted-foreground mb-4 select-none">
                 Create your first configuration profile to get started
               </p>
               <Button onClick={() => setIsCreateDialogOpen(true)}>
@@ -312,7 +312,7 @@ export function ProfileManagement({ deviceStatus }: ProfileManagementProps) {
               Export All Profiles
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
+          <p className="text-sm text-muted-foreground mt-2 select-none">
             Import/export functionality coming soon...
           </p>
         </CardContent>

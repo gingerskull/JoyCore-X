@@ -2,6 +2,7 @@ import { MousePointer } from 'lucide-react';
 import { useState } from 'react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -119,7 +120,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
           <CardDescription>Configure button functions and behavior</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center py-8">
-          <p className="text-muted-foreground">Reading configuration from device...</p>
+          <p className="text-muted-foreground select-none">Reading configuration from device...</p>
         </CardContent>
       </Card>
     );
@@ -136,7 +137,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
           <CardDescription>Configure button functions and behavior</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center py-8">
-          <p className="text-muted-foreground">No buttons configured on device</p>
+          <p className="text-muted-foreground select-none">No buttons configured on device</p>
         </CardContent>
       </Card>
     );
@@ -157,7 +158,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
         <div className="flex h-[600px] gap-4">
           {/* Left half - placeholder for future button details */}
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <p>Select a button to configure</p>
+            <p className="select-none">Select a button to configure</p>
           </div>
           
           {/* Vertical separator */}
@@ -195,42 +196,26 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                         {(() => {
                           const buttonInfo = parseButtonName(button.name);
                           
-                          // Define colors based on button type
-                          const colorClasses = {
-                            direct: {
-                              bg: 'bg-blue-50',
-                              border: 'border-blue-200',
-                              text: 'text-blue-700'
-                            },
-                            shiftreg: {
-                              bg: 'bg-green-50',
-                              border: 'border-green-200',
-                              text: 'text-green-700'
-                            },
-                            matrix: {
-                              bg: 'bg-purple-50',
-                              border: 'border-purple-200',
-                              text: 'text-purple-700'
-                            }
+                          // Map button types to badge variants
+                          const variantMap = {
+                            direct: 'blue',
+                            shiftreg: 'teal',
+                            matrix: 'purple'
                           };
                           
-                          const colors = colorClasses[buttonInfo.type] || colorClasses.direct;
+                          const variant = variantMap[buttonInfo.type] || 'blue';
                           
                           return (
-                            <div className={`${colors.bg} border ${colors.border} rounded p-1 min-w-[100px] flex items-center justify-center`}>
-                              <span className={`text-xs font-mono font-medium ${colors.text}`}>
-                                {buttonInfo.label}
-                              </span>
-                            </div>
+                            <Badge variant={variant as "blue" | "teal" | "purple"} className="font-mono">
+                              {buttonInfo.label}
+                            </Badge>
                           );
                         })()}
                       </TableCell>
                       <TableCell className="p-2">
-                        <div className="bg-muted border rounded p-1 min-w-[2rem] flex items-center justify-center">
-                          <span className="text-xs font-mono font-medium text-muted-foreground">
-                            {button.id}
-                          </span>
-                        </div>
+                        <Badge variant="secondary" className="font-mono">
+                          {button.id}
+                        </Badge>
                       </TableCell>
                       <TableCell className="p-2">
                         <Select

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PanelLeft, Usb, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { PanelLeft, Usb, AlertTriangle, CheckCircle2, Loader2, Gamepad2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceConfiguration } from './DeviceConfiguration';
+import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
 import type { Device, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
 
 interface DevicePinAssignments {
@@ -20,9 +21,10 @@ interface CollapsedSidebarProps {
   setParsedAxes: (axes: ParsedAxisConfig[]) => void;
   setParsedButtons: (buttons: ParsedButtonConfig[]) => void;
   setDevicePinAssignments?: (pinAssignments: DevicePinAssignments | undefined) => void;
+  onUpdateDialogOpen: () => void;
 }
 
-export function CollapsedSidebar({ onExpand, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons, setDevicePinAssignments }: CollapsedSidebarProps) {
+export function CollapsedSidebar({ onExpand, parsedAxes, parsedButtons, setParsedAxes, setParsedButtons, setDevicePinAssignments, onUpdateDialogOpen }: CollapsedSidebarProps) {
   const {
     devices,
     connectedDevice,
@@ -35,6 +37,17 @@ export function CollapsedSidebar({ onExpand, parsedAxes, parsedButtons, setParse
 
   const [hoveredDevice, setHoveredDevice] = useState<string | null>(null);
   const [connectingToId, setConnectingToId] = useState<string | null>(null);
+
+  // Get current firmware version from connected device
+  const currentFirmwareVersion = connectedDevice?.device_status?.firmware_version;
+
+  // Use firmware update hook
+  const {
+    hasUpdateAvailable,
+  } = useFirmwareUpdates({
+    currentVersion: currentFirmwareVersion,
+    autoCheck: true,
+  });
 
   const getDeviceStatusColor = (device: Device) => {
     if (device.connection_state === 'Connected') {
@@ -97,6 +110,25 @@ export function CollapsedSidebar({ onExpand, parsedAxes, parsedButtons, setParse
   return (
     <div className="h-full p-3">
       <div className="bg-card border rounded-lg shadow-sm h-full flex flex-col p-4 space-y-4">
+        {/* Header Section */}
+        <div className="flex flex-col items-center space-y-2">
+          <Gamepad2 className="h-6 w-6" />
+          <Badge variant="outline" className="text-[10px] px-1">v0.1</Badge>
+          {hasUpdateAvailable && isConnected && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onUpdateDialogOpen}
+              className="relative p-0 h-6 w-6"
+              title="Update Available"
+            >
+              <div className="absolute -top-1 -right-1 h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
+            </Button>
+          )}
+        </div>
+
+        <Separator className="my-2" />
+
         {/* Expand Button Section */}
         <div className="flex justify-center">
           <Button

@@ -55,7 +55,7 @@ export function AxisConfiguration({ deviceStatus, isConnected = false, parsedAxe
           <CardDescription>Configure analog input axes</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center py-8">
-          <p className="text-muted-foreground">Reading configuration from device...</p>
+          <p className="text-muted-foreground select-none">Reading configuration from device...</p>
         </CardContent>
       </Card>
     );
@@ -72,7 +72,7 @@ export function AxisConfiguration({ deviceStatus, isConnected = false, parsedAxe
           <CardDescription>Configure analog input axes</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center py-8">
-          <p className="text-muted-foreground">No axes configured on device</p>
+          <p className="text-muted-foreground select-none">No axes configured on device</p>
         </CardContent>
       </Card>
     );
@@ -116,36 +116,36 @@ export function AxisConfiguration({ deviceStatus, isConnected = false, parsedAxe
             <CardContent className="space-y-6">
               {/* Configuration Display (Read-only) */}
               <div className="bg-muted/50 p-4 rounded-lg space-y-4">
-                <h4 className="font-medium text-sm">Configuration from Device</h4>
+                <h4 className="font-medium text-sm select-none">Configuration from Device</h4>
                 
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <Label className="text-xs text-muted-foreground">Name</Label>
-                    <p className="font-mono">{currentAxis.name}</p>
+                    <p className="font-mono select-none">{currentAxis.name}</p>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Curve</Label>
-                    <p className="font-mono">{currentAxis.curve}</p>
+                    <p className="font-mono select-none">{currentAxis.curve}</p>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Min Value</Label>
-                    <p className="font-mono">{currentAxis.min_value}</p>
+                    <p className="font-mono select-none">{currentAxis.min_value}</p>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Max Value</Label>
-                    <p className="font-mono">{currentAxis.max_value}</p>
+                    <p className="font-mono select-none">{currentAxis.max_value}</p>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Center</Label>
-                    <p className="font-mono">{currentAxis.center_value}</p>
+                    <p className="font-mono select-none">{currentAxis.center_value}</p>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Deadzone</Label>
-                    <p className="font-mono">{currentAxis.deadzone}</p>
+                    <p className="font-mono select-none">{currentAxis.deadzone}</p>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Inverted</Label>
-                    <p className="font-mono">{currentAxis.inverted ? 'Yes' : 'No'}</p>
+                    <p className="font-mono select-none">{currentAxis.inverted ? 'Yes' : 'No'}</p>
                   </div>
                 </div>
               </div>
