@@ -48,8 +48,8 @@ impl SerialInterface {
                         device_info.pid = usb_info.pid;
                     }
                     
-                    log::info!("Found JoyCore device on port: {} (S/N: {:?})", 
-                              port_info.port_name, device_info.serial_number);
+                    // log::info!("Found JoyCore device on port: {} (S/N: {:?})", 
+                    //           port_info.port_name, device_info.serial_number);
                     devices.push(device_info);
                 }
                 Ok(None) => {

@@ -3,6 +3,7 @@ pub mod device;
 pub mod commands;
 pub mod update;
 pub mod config;
+pub mod hid;
 
 use std::sync::Arc;
 use device::DeviceManager;
@@ -53,6 +54,11 @@ pub fn run() {
       commands::read_parsed_device_config,
       commands::read_device_pin_assignments,
       commands::read_parsed_device_config_with_pins,
+      commands::read_button_states,
+  commands::debug_hid_mapping,
+  commands::debug_full_hid_report,
+  commands::hid_mapping_details,
+  commands::hid_button_bit_diagnostics,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
