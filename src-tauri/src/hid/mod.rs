@@ -3,6 +3,7 @@ use std::sync::{Arc, atomic::{AtomicBool, Ordering}, Mutex as StdMutex};
 use std::thread::{self, JoinHandle};
 use tokio::sync::Mutex;
 use thiserror::Error;
+use tauri::{AppHandle, Emitter};
 
 // JoyCore device identifiers
 const JOYCORE_VID: u16 = 0x2E8A; // Raspberry Pi
@@ -33,6 +34,17 @@ pub struct ButtonStates {
     pub buttons: u64,
     
     /// Timestamp when the state was read
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+/// Event payload for button press/release events
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ButtonEvent {
+    /// Button ID (0-63)
+    pub button_id: u8,
+    /// True if pressed, false if released
+    pub pressed: bool,
+    /// Timestamp of the event
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
@@ -73,6 +85,8 @@ pub struct HidReader {
     last_report_len: Arc<StdMutex<usize>>,
     // Parsed mapping information from feature reports (if supported by firmware)
     mapping_data: Arc<StdMutex<Option<MappingData>>>,
+    // Tauri app handle for emitting events
+    app_handle: Arc<StdMutex<Option<AppHandle>>>,
 }
 
 /// Raw HID mapping information structure as provided by firmware feature report ID 3.
@@ -114,7 +128,15 @@ impl HidReader {
             last_report: Arc::new(StdMutex::new([0u8;64])),
             last_report_len: Arc::new(StdMutex::new(0)),
             mapping_data: Arc::new(StdMutex::new(None)),
+            app_handle: Arc::new(StdMutex::new(None)),
         })
+    }
+    
+    /// Set the Tauri app handle for event emission
+    pub fn set_app_handle(&self, handle: AppHandle) {
+        if let Ok(mut app_handle) = self.app_handle.lock() {
+            *app_handle = Some(handle);
+        }
     }
     
     /// Connect to the JoyCore HID device
@@ -414,10 +436,13 @@ impl HidReader {
         let last_report_len_arc = self.last_report_len.clone();
         let mapping_data_arc = self.mapping_data.clone();
         let running_flag = self.running.clone();
+        let app_handle_arc = self.app_handle.clone();
 
         let handle = thread::spawn(move || {
             let mut preferred_offset: Option<usize> = None; // For heuristic fallback only
             let mut report_count: u64 = 0;
+            let mut last_sync_time = std::time::Instant::now();
+            const SYNC_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1); // Sync every second
             // previous logical state no longer needed (we derive changes from stored state)
             // Heuristic baseline variables (used only if mapping feature unsupported)
             let mut baseline_0: Option<u64> = None;
@@ -481,10 +506,35 @@ impl HidReader {
                                 let mut newly_released: Vec<u8> = Vec::new();
                                 for b in 0..64 { if (pressed_now & (1u64<<b)) != 0 { newly_pressed.push(b as u8); if newly_pressed.len()>=8 { break; }}}
                                 for b in 0..64 { if (released_now & (1u64<<b)) != 0 { newly_released.push(b as u8); if newly_released.len()>=8 { break; }}}
-                                log::debug!(
-                                    "[HID iface {}] buttons changed rpt#{} pressed={:?} released={:?}",
-                                    interface, report_count, newly_pressed, newly_released
+                                let timestamp = chrono::Utc::now();
+                                log::info!(
+                                    "[BACKEND HID {} @ {}] Button change: pressed={:?} released={:?} (report #{})",
+                                    interface, timestamp.format("%H:%M:%S%.3f"), newly_pressed, newly_released, report_count
                                 );
+                                
+                                // Emit events for button changes
+                                if let Ok(app_handle) = app_handle_arc.lock() {
+                                    if let Some(handle) = app_handle.as_ref() {
+                                        // Emit events for pressed buttons
+                                        for &button_id in &newly_pressed {
+                                            let event = ButtonEvent {
+                                                button_id,
+                                                pressed: true,
+                                                timestamp,
+                                            };
+                                            let _ = handle.emit("button-changed", &event);
+                                        }
+                                        // Emit events for released buttons
+                                        for &button_id in &newly_released {
+                                            let event = ButtonEvent {
+                                                button_id,
+                                                pressed: false,
+                                                timestamp,
+                                            };
+                                            let _ = handle.emit("button-changed", &event);
+                                        }
+                                    }
+                                }
                             }
                             state_guard.buttons = logical_u64;
                             state_guard.timestamp = chrono::Utc::now();
@@ -534,10 +584,35 @@ impl HidReader {
                         let mut newly_released: Vec<u8> = Vec::new();
                         for b in 0..64 { if (pressed_now & (1u64<<b)) != 0 { newly_pressed.push(b as u8); if newly_pressed.len()>=8 { break; }}}
                         for b in 0..64 { if (released_now & (1u64<<b)) != 0 { newly_released.push(b as u8); if newly_released.len()>=8 { break; }}}
-                        log::debug!(
-                            "[HID iface {} LEGACY] change rpt#{} sel_off={} dyn_raw=0x{:016X} logical=0x{:016X} pressed={:?} released={:?}",
-                            interface, report_count, chosen_offset, chosen_dyn_val, logical_val, newly_pressed, newly_released
+                        let timestamp = chrono::Utc::now();
+                        log::info!(
+                            "[BACKEND HID {} LEGACY @ {}] Button change: pressed={:?} released={:?} (report #{}, offset={}, raw=0x{:016X})",
+                            interface, timestamp.format("%H:%M:%S%.3f"), newly_pressed, newly_released, report_count, chosen_offset, logical_val
                         );
+                        
+                        // Emit events for button changes
+                        if let Ok(app_handle) = app_handle_arc.lock() {
+                            if let Some(handle) = app_handle.as_ref() {
+                                // Emit events for pressed buttons
+                                for &button_id in &newly_pressed {
+                                    let event = ButtonEvent {
+                                        button_id,
+                                        pressed: true,
+                                        timestamp,
+                                    };
+                                    let _ = handle.emit("button-changed", &event);
+                                }
+                                // Emit events for released buttons
+                                for &button_id in &newly_released {
+                                    let event = ButtonEvent {
+                                        button_id,
+                                        pressed: false,
+                                        timestamp,
+                                    };
+                                    let _ = handle.emit("button-changed", &event);
+                                }
+                            }
+                        }
                         state_guard.buttons = logical_val;
                         state_guard.timestamp = chrono::Utc::now();
                         if let Ok(mut o) = sel_offset_arc.lock() { *o = Some(chosen_offset); }
@@ -551,6 +626,19 @@ impl HidReader {
                     } else if report_count % 400 == 0 {
                         state_guard.timestamp = chrono::Utc::now();
                         log::debug!("[HID iface {} LEGACY] heartbeat rpt#{}", interface, report_count);
+                    }
+                }
+                
+                // Emit periodic state sync event
+                if last_sync_time.elapsed() >= SYNC_INTERVAL {
+                    last_sync_time = std::time::Instant::now();
+                    if let Ok(state) = state_arc.lock() {
+                        if let Ok(app_handle) = app_handle_arc.lock() {
+                            if let Some(handle) = app_handle.as_ref() {
+                                let _ = handle.emit("button-state-sync", &state.clone());
+                                log::debug!("Emitted button state sync: 0x{:016X}", state.buttons);
+                            }
+                        }
                     }
                 }
             }

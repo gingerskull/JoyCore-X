@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 use semver::Version;
+use tauri::AppHandle;
 
 use crate::serial::{SerialInterface, ConfigProtocol, StorageInfo};
 use crate::update::{UpdateService, VersionCheckResult};
@@ -34,6 +35,12 @@ impl DeviceManager {
             profile_manager: Arc::new(Mutex::new(ProfileManager::new())),
             hid_reader: Arc::new(Mutex::new(hid_reader)),
         }
+    }
+    
+    /// Set the Tauri app handle for event emission
+    pub async fn set_app_handle(&self, handle: AppHandle) {
+        let hid_reader = self.hid_reader.lock().await;
+        hid_reader.set_app_handle(handle);
     }
 
     /// Discover available JoyCore devices

@@ -1,4 +1,4 @@
-import React from 'react';
+// Removed unused React default import (automatic JSX runtime)
 import { PinDropdown } from './PinDropdown';
 import { Badge } from '@/components/ui/badge';
 import type { PinConfiguration, PinFunction } from '@/lib/types';

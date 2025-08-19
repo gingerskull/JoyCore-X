@@ -1,4 +1,4 @@
-import React from 'react';
+// Removed unused React default import (automatic JSX runtime)
 import {
   Select,
   SelectContent,

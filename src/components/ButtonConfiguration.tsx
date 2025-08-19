@@ -1,6 +1,7 @@
 import { MousePointer } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,18 +37,13 @@ interface ButtonStates {
   timestamp: string;
 }
 
-interface HidMappingDetails {
-  protocol_version: number;
-  input_report_id: number;
-  button_count: number;
-  axis_count: number;
-  button_byte_offset: number;
-  button_bit_order: number;
-  frame_counter_offset: number;
-  sequential: boolean;
-  mapping_crc: number;
-  mapping: number[]; // mapping[bit_index] = logical id
+interface ButtonEvent {
+  button_id: number;
+  pressed: boolean;
+  timestamp: string;
 }
+
+// (Mapping details interface removed after optimization; reintroduce if advanced mapping UI needed.)
 
 function parseButtonName(name: string): ParsedButtonInfo {
   // Based on actual backend formats from src-tauri/src/config/binary.rs:
@@ -93,9 +89,19 @@ function parseButtonName(name: string): ParsedButtonInfo {
 
 export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedButtons = [], isLoading = false }: ButtonConfigurationProps) {
   const [buttonStates, setButtonStates] = useState<Record<number, { enabled: boolean; function: string }>>({});
-  const [hidButtonStates, setHidButtonStates] = useState<ButtonStates | null>(null);
-  const [hidMapping, setHidMapping] = useState<HidMappingDetails | null>(null);
+  const [hidButtonStates, setHidButtonStates] = useState<ButtonStates | null>(null); // retains last full payload (timestamp)
+  const [buttonMask, setButtonMask] = useState<number>(0); // UI-rendered bitmask (throttled)
+  const latestMaskRef = useRef<number>(0); // immediate latest from poller
+  const displayedMaskRef = useRef<number>(0); // what's currently displayed in UI
+  const pendingFrameRef = useRef<boolean>(false);
+  const pressedHistoryRef = useRef<Map<number, number>>(new Map()); // buttonId -> lastPressedTime
+  const lastActivityRef = useRef<number>(0); // track last activity time globally
+  const HOLD_VISIBILITY_MS = 50; // Show press for at least 50ms
+  // Mapping details reserved for future advanced UI (currently unused after optimization)
+  // Removed active usage to avoid unnecessary re-renders / lint warnings.
   const [lastNonZeroButtons, setLastNonZeroButtons] = useState<number | null>(null);
+  // Track last log time to avoid spamming console which can add UI latency
+  const lastLogRef = useRef<number>(0);
   const [noHidActivity, setNoHidActivity] = useState(false);
   const { isConnected: contextIsConnected } = useDeviceContext();
   
@@ -131,55 +137,145 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
     };
   };
 
-  // Poll HID button states when connected
+  // Fetch HID mapping once per connection
   useEffect(() => {
     if (!connected) {
       setHidButtonStates(null);
       return;
     }
+    // Optionally could fetch mapping here in future.
+  }, [connected]);
 
-    const ensureMapping = async () => {
-      try {
-        const details = await invoke<HidMappingDetails | null>('hid_mapping_details');
-        if (details && !hidMapping) {
-          setHidMapping(details);
-        }
-      } catch { /* ignore */ }
-    };
-
-    const pollButtonStates = async () => {
+  // Event-driven button state updates
+  useEffect(() => {
+    if (!connected) return;
+    
+    let unlistenButton: (() => void) | null = null;
+    let unlistenSync: (() => void) | null = null;
+    
+    const setupEventListeners = async () => {
+      // Get initial state
       try {
         const states: ButtonStates = await invoke('read_button_states');
         setHidButtonStates(states);
+        latestMaskRef.current = states.buttons;
+        displayedMaskRef.current = states.buttons;
+        setButtonMask(states.buttons);
+      } catch (e) {
+        console.warn('Failed to get initial button states:', e);
+      }
+      
+      // Listen for button change events
+      unlistenButton = await listen<ButtonEvent>('button-changed', (event) => {
+        const { button_id, pressed, timestamp } = event.payload;
+        const now = performance.now();
         
-        // Log if any buttons are pressed
-        if (states.buttons !== 0) {
-          if (lastNonZeroButtons === null || lastNonZeroButtons !== states.buttons) {
-            console.log('Button states:', states.buttons.toString(2).padStart(64, '0'));
-          }
-          setLastNonZeroButtons(states.buttons);
+        console.log(`[FRONTEND EVENT] Button ${button_id} ${pressed ? 'pressed' : 'released'} at ${timestamp}`);
+        
+        // Update button mask
+        const mask = button_id < 32 ? (1 << button_id) : Math.pow(2, button_id);
+        if (pressed) {
+          latestMaskRef.current |= mask;
+          pressedHistoryRef.current.set(button_id, now);
+        } else {
+          latestMaskRef.current &= ~mask;
         }
-      } catch (error) {
-        console.warn('Failed to read button states:', error);
+        
+        // Update display with hold visibility
+        let displayMask = latestMaskRef.current;
+        const cutoffTime = now - HOLD_VISIBILITY_MS;
+        
+        // Clean old entries and apply hold visibility
+        for (const [bit, time] of pressedHistoryRef.current) {
+          if (time < cutoffTime) {
+            const bitMask = bit < 32 ? (1 << bit) : Math.pow(2, bit);
+            if (!(latestMaskRef.current & bitMask)) {
+              pressedHistoryRef.current.delete(bit);
+            }
+          } else {
+            // Keep showing recently pressed buttons
+            const bitMask = bit < 32 ? (1 << bit) : Math.pow(2, bit);
+            displayMask |= bitMask;
+          }
+        }
+        
+        // Update UI if display mask changed
+        if (displayMask !== displayedMaskRef.current) {
+          if (displayMask !== 0) {
+            lastActivityRef.current = now;
+            setLastNonZeroButtons(displayMask);
+          }
+          
+          // Schedule UI update on next frame
+          if (!pendingFrameRef.current) {
+            pendingFrameRef.current = true;
+            const maskToDisplay = displayMask;
+            requestAnimationFrame(() => {
+              pendingFrameRef.current = false;
+              displayedMaskRef.current = maskToDisplay;
+              setButtonMask(maskToDisplay);
+              console.log(`[FRONTEND UI] Updated display to: 0x${maskToDisplay.toString(16)}`);
+            });
+          }
+        }
+      });
+      
+      // Listen for periodic state sync events
+      unlistenSync = await listen<ButtonStates>('button-state-sync', (event) => {
+        const { buttons, timestamp } = event.payload;
+        console.log(`[FRONTEND SYNC] State sync received: 0x${buttons.toString(16)} at ${timestamp}`);
+        
+        // Update state to match backend
+        latestMaskRef.current = buttons;
+        setHidButtonStates(event.payload);
+        
+        // Apply hold visibility and update display if needed
+        const now = performance.now();
+        let displayMask = buttons;
+        const cutoffTime = now - HOLD_VISIBILITY_MS;
+        
+        for (const [bit, time] of pressedHistoryRef.current) {
+          if (time >= cutoffTime) {
+            const bitMask = bit < 32 ? (1 << bit) : Math.pow(2, bit);
+            displayMask |= bitMask;
+          }
+        }
+        
+        if (displayMask !== displayedMaskRef.current) {
+          displayedMaskRef.current = displayMask;
+          setButtonMask(displayMask);
+        }
+      });
+    };
+    
+    setupEventListeners();
+    
+    return () => {
+      if (unlistenButton) {
+        unlistenButton();
+      }
+      if (unlistenSync) {
+        unlistenSync();
       }
     };
+  }, [connected]);
 
-  // Initial
-  ensureMapping();
-  pollButtonStates();
+  // Derived pressed set memoized (avoids repeated bit math in render for many buttons)
+  const pressedSet = useMemo(() => {
+    const set = new Set<number>();
+    if (buttonMask === 0) return set;
     
-    // Debug: Log button info once
-    console.log('Parsed buttons:', parsedButtons.map(b => ({ id: b.id, name: b.name })));
-    console.log('Button count:', parsedButtons.length);
-    console.log('Connected:', connected);
-    
-    // Poll every 50ms
-    const intervalId = setInterval(pollButtonStates, 50);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [connected, lastNonZeroButtons, parsedButtons, hidMapping]);
+    // Use proper bit manipulation for up to 53 bits
+    const maxId = Math.max(-1, ...parsedButtons.map(b => b.id));
+    for (let bit = 0; bit <= maxId && bit < 53; bit++) {
+      // Use Math.pow for bits > 31 to avoid JS bitwise operator limitations
+      const bitValue = bit < 32 ? (1 << bit) : Math.pow(2, bit);
+      if ((buttonMask & bitValue) !== 0) {
+        set.add(bit);
+      }
+    }
+    return set;
+  }, [buttonMask, parsedButtons]);
 
   // Detect HID inactivity (no non-zero button states & timestamp not updating)
   useEffect(() => {
@@ -203,7 +299,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
     return () => { if (timeout) window.clearTimeout(timeout); };
   }, [connected, hidButtonStates, lastNonZeroButtons]);
 
-  // Group buttons by type
+  // Pre-parse button names once (avoid regex per render for each cell) & group
   const groupedButtons = useMemo(() => {
     const groups = {
       direct: [] as Array<{ button: ParsedButtonConfig; info: ParsedButtonInfo }>,
@@ -237,14 +333,8 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
     return { rows, cols };
   }, [groupedButtons.matrix]);
 
-  // Helper to check if a button is pressed
-  const isButtonPressed = (buttonId: number): boolean => {
-    if (!hidButtonStates) return false;
-    // Backend already maps logical IDs into u64 bits. So just test that bit.
-    if (buttonId >= 64) return false; // backend currently only first 64 bits
-    const pressed = (hidButtonStates.buttons & (1 << buttonId)) !== 0;
-    return pressed;
-  };
+  // Helper to check if a button is pressed (uses memoized pressedSet)
+  const isButtonPressed = useCallback((buttonId: number) => pressedSet.has(buttonId), [pressedSet]);
 
   // Helper to get button badge state
   const getButtonBadgeState = (button: ParsedButtonConfig): 'unconfigured' | 'configured' | 'pressed' | 'pressed-unconfigured' => {
@@ -448,20 +538,16 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                       </TableCell>
                       <TableCell className="p-2">
                         {(() => {
-                          const buttonInfo = parseButtonName(button.name);
-                          
-                          // Map button types to badge variants
-                          const variantMap = {
-                            direct: 'blue',
-                            shiftreg: 'teal',
-                            matrix: 'purple'
-                          };
-                          
-                          const variant = variantMap[buttonInfo.type] || 'blue';
-                          
+                          // button.name parsing already cached via grouping, retrieve matching info
+                          const info = groupedButtons.direct.find(d => d.button === button)?.info ||
+                                       groupedButtons.shiftreg.find(s => s.button === button)?.info ||
+                                       groupedButtons.matrix.find(m => m.button === button)?.info ||
+                                       parseButtonName(button.name);
+                          const variantMap = { direct: 'blue', shiftreg: 'teal', matrix: 'purple' } as const;
+                          const variant = variantMap[info.type] || 'blue';
                           return (
-                            <Badge variant={variant as "blue" | "teal" | "purple"} className="font-mono text-xs">
-                              {buttonInfo.label}
+                            <Badge variant={variant as 'blue' | 'teal' | 'purple'} className="font-mono text-xs">
+                              {info.label}
                             </Badge>
                           );
                         })()}
