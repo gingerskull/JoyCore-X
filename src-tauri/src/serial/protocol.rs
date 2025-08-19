@@ -79,7 +79,7 @@ impl ConfigProtocol {
         let status_response = self.interface.send_command("STATUS").await?;
         
         log::debug!("Raw status response: {}", status_response);
-        log::info!("Device status: firmware={}, device={}", firmware_version, device_name);
+        // log::info!("Device status: firmware={}, device={}", firmware_version, device_name);
         
         // For now, create a basic status since we just need to verify connection
         // In the future, we could parse the actual status response format

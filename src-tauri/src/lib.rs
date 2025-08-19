@@ -3,9 +3,11 @@ pub mod device;
 pub mod commands;
 pub mod update;
 pub mod config;
+pub mod hid;
 
 use std::sync::Arc;
 use device::DeviceManager;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -53,6 +55,11 @@ pub fn run() {
       commands::read_parsed_device_config,
       commands::read_device_pin_assignments,
       commands::read_parsed_device_config_with_pins,
+      commands::read_button_states,
+  commands::debug_hid_mapping,
+  commands::debug_full_hid_report,
+  commands::hid_mapping_details,
+  commands::hid_button_bit_diagnostics,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -62,6 +69,14 @@ pub fn run() {
             .build(),
         )?;
       }
+      
+      // Pass app handle to device manager for event emission
+      let device_manager: tauri::State<Arc<DeviceManager>> = app.state();
+      let device_manager_clone = device_manager.inner().clone();
+      let handle = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        device_manager_clone.set_app_handle(handle).await;
+      });
       
       log::info!("JoyCore-X application started");
       Ok(())

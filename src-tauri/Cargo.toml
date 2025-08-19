@@ -47,3 +47,7 @@ semver = { version = "1.0", features = ["serde"] }
 futures-util = "0.3"
 sha2 = "0.10"
 
+# HID device support
+hidapi = "2.6"
+hex = "0.4"
+

@@ -7,6 +7,7 @@ use semver::Version;
 use crate::device::{DeviceManager, Device, ProfileConfig, ProfileManager};
 use crate::serial::protocol::{DeviceStatus, AxisConfig, ButtonConfig};
 use crate::serial::StorageInfo;
+use crate::hid::ButtonStates;
 use crate::update::{UpdateService, VersionCheckResult};
 use crate::config::binary::{BinaryConfig, UIAxisConfig, UIButtonConfig};
 
@@ -555,4 +556,53 @@ pub async fn read_parsed_device_config_with_pins(
         axes.len(), buttons.len(), pin_assignments.len());
 
     Ok((axes, buttons, pin_assignments))
+}
+
+/// Read current button states from HID device
+#[tauri::command]
+pub async fn read_button_states(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<ButtonStates, String> {
+    log::debug!("read_button_states command called");
+    device_manager
+        .read_button_states()
+        .await
+        .map_err(|e| {
+            let error = format!("Failed to read button states: {}", e);
+            log::error!("{}", error);
+            error
+        })
+}
+
+/// Debug: expose selected HID offset and last raw value
+#[tauri::command]
+pub async fn debug_hid_mapping(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<(usize, u64)>, String> {
+    Ok(device_manager.hid_debug_mapping().await)
+}
+
+/// Debug: get last full HID report (length, hex string)
+#[tauri::command]
+pub async fn debug_full_hid_report(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<(usize, String)>, String> {
+    Ok(device_manager.hid_full_report().await)
+}
+
+/// Detailed HID mapping info (feature report parsed) if available
+#[tauri::command]
+pub async fn hid_mapping_details(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<serde_json::Value>, String> {
+    Ok(device_manager.hid_mapping_details().await)
+}
+
+/// Diagnostic: raw vs logical button bit analysis (first bytes)
+#[tauri::command]
+pub async fn hid_button_bit_diagnostics(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<serde_json::Value>, String> {
+    // There is no direct existing method; access via hid reader through mapping details path
+    Ok(device_manager.hid_button_bit_diagnostics().await)
 }

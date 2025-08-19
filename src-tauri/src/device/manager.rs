@@ -3,10 +3,12 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 use semver::Version;
+use tauri::AppHandle;
 
 use crate::serial::{SerialInterface, ConfigProtocol, StorageInfo};
 use crate::update::{UpdateService, VersionCheckResult};
 use crate::config::BinaryConfig;
+use crate::hid::{HidReader, ButtonStates};
 use super::{Device, ConnectionState, ProfileManager, DeviceError, Result, FirmwareUpdateSettings};
 
 /// Central device management system
@@ -15,15 +17,30 @@ pub struct DeviceManager {
     devices: Arc<RwLock<HashMap<Uuid, Device>>>,
     connected_device: Arc<Mutex<Option<(Uuid, ConfigProtocol)>>>,
     profile_manager: Arc<Mutex<ProfileManager>>,
+    hid_reader: Arc<Mutex<HidReader>>,
 }
 
 impl DeviceManager {
     pub fn new() -> Self {
+        // Try to initialize HID reader, log error if it fails
+        let hid_reader = HidReader::new().unwrap_or_else(|e| {
+            log::warn!("Failed to initialize HID reader: {}. Button state reading will not be available.", e);
+            // Return a reader that will work but won't be able to connect
+            HidReader::new().expect("Second HID initialization attempt failed")
+        });
+        
         Self {
             devices: Arc::new(RwLock::new(HashMap::new())),
             connected_device: Arc::new(Mutex::new(None)),
             profile_manager: Arc::new(Mutex::new(ProfileManager::new())),
+            hid_reader: Arc::new(Mutex::new(hid_reader)),
         }
+    }
+    
+    /// Set the Tauri app handle for event emission
+    pub async fn set_app_handle(&self, handle: AppHandle) {
+        let hid_reader = self.hid_reader.lock().await;
+        hid_reader.set_app_handle(handle);
     }
 
     /// Discover available JoyCore devices
@@ -236,6 +253,9 @@ impl DeviceManager {
                                     *connected_guard = Some((*device_id, protocol));
                                 }
                                 
+                                // Try to connect HID device for button state reading
+                                let _ = self.connect_hid().await;
+                                
                                 log::info!("Successfully connected to device: {}", device.port_name);
                                 Ok(())
                             }
@@ -271,6 +291,9 @@ impl DeviceManager {
         if let Some((device_id, mut protocol)) = connected_guard.take() {
             // Disconnect the serial interface
             protocol.interface_mut().disconnect();
+            
+            // Disconnect HID device
+            let _ = self.disconnect_hid().await;
             
             // Update device state
             self.update_device_connection_state(&device_id, ConnectionState::Disconnected).await;
@@ -589,6 +612,106 @@ impl DeviceManager {
             Ok(())
         } else {
             Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Read button states from HID device
+    pub async fn read_button_states(&self) -> Result<ButtonStates> {
+        let hid_reader = self.hid_reader.lock().await;
+        
+        // Check if we're connected to a device via serial first
+        let connected = {
+            let connected_guard = self.connected_device.lock().await;
+            connected_guard.is_some()
+        };
+        
+        if !connected {
+            log::debug!("read_button_states called but no device connected");
+            return Err(DeviceError::NotConnected);
+        }
+        
+        // Check if HID is connected
+        if !hid_reader.is_connected().await {
+            log::warn!("read_button_states called but HID not connected");
+            return Err(DeviceError::SerialError(
+                crate::serial::SerialError::ProtocolError("HID device not connected".to_string())
+            ));
+        }
+        
+        // Try to read button states from HID
+        match hid_reader.read_button_states().await {
+            Ok(states) => {
+                static ONCE: std::sync::Once = std::sync::Once::new();
+                ONCE.call_once(|| {
+                    log::info!("First successful HID button read");
+                });
+                Ok(states)
+            }
+            Err(e) => {
+                log::error!("Failed to read HID button states: {}", e);
+                Err(DeviceError::SerialError(
+                    crate::serial::SerialError::ProtocolError(format!("HID error: {}", e))
+                ))
+            }
+        }
+    }
+
+    /// Debug helper: get selected HID offset and last raw value (if available)
+    pub async fn hid_debug_mapping(&self) -> Option<(usize, u64)> {
+        let hid_reader = self.hid_reader.lock().await;
+        hid_reader.debug_hid_mapping().await
+    }
+
+    /// Debug helper: get last full HID report (len, hex)
+    pub async fn hid_full_report(&self) -> Option<(usize, String)> {
+        let hid_reader = self.hid_reader.lock().await;
+        hid_reader.debug_full_report().await
+    }
+
+    /// Detailed HID mapping info if supported by firmware
+    pub async fn hid_mapping_details(&self) -> Option<serde_json::Value> {
+        let hid_reader = self.hid_reader.lock().await;
+        hid_reader.mapping_details().await
+    }
+
+    /// Diagnostic: raw vs logical button bits (first 16) for offset debugging
+    pub async fn hid_button_bit_diagnostics(&self) -> Option<serde_json::Value> {
+        let hid_reader = self.hid_reader.lock().await;
+        hid_reader.debug_button_bit_diagnostics().await
+    }
+    
+    /// Connect HID device (called automatically when connecting via serial)
+    async fn connect_hid(&self) -> Result<()> {
+        let hid_reader = self.hid_reader.lock().await;
+        
+        // Try to connect to HID device
+        match hid_reader.connect().await {
+            Ok(()) => {
+                log::info!("HID device connected for button state reading");
+                Ok(())
+            }
+            Err(e) => {
+                log::warn!("Failed to connect HID device: {}. Button states will not be available.", e);
+                // Don't fail the overall connection if HID fails
+                Ok(())
+            }
+        }
+    }
+    
+    /// Disconnect HID device (called automatically when disconnecting serial)
+    async fn disconnect_hid(&self) -> Result<()> {
+        let hid_reader = self.hid_reader.lock().await;
+        
+        match hid_reader.disconnect().await {
+            Ok(()) => {
+                log::info!("HID device disconnected");
+                Ok(())
+            }
+            Err(e) => {
+                log::warn!("Failed to disconnect HID device: {}", e);
+                // Don't fail the overall disconnection if HID fails
+                Ok(())
+            }
         }
     }
 }
