@@ -53,6 +53,7 @@ impl ConfigProtocol {
         Self { interface }
     }
 
+
     /// Initialize communication with the device
     pub async fn init(&mut self) -> Result<()> {
         if !self.interface.is_connected() {

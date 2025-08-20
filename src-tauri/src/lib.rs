@@ -4,6 +4,7 @@ pub mod commands;
 pub mod update;
 pub mod config;
 pub mod hid;
+pub mod raw_state;
 
 use std::sync::Arc;
 use device::DeviceManager;
@@ -56,10 +57,18 @@ pub fn run() {
       commands::read_device_pin_assignments,
       commands::read_parsed_device_config_with_pins,
       commands::read_button_states,
-  commands::debug_hid_mapping,
-  commands::debug_full_hid_report,
-  commands::hid_mapping_details,
-  commands::hid_button_bit_diagnostics,
+      commands::debug_hid_mapping,
+      commands::debug_full_hid_report,
+      commands::hid_mapping_details,
+      commands::hid_button_bit_diagnostics,
+      // Raw hardware state commands
+      commands::get_raw_state_display_mode,
+      commands::read_raw_gpio_states,
+      commands::read_raw_matrix_state,
+      commands::read_raw_shift_reg_state,
+      commands::read_all_raw_states,
+      commands::start_raw_state_monitoring,
+      commands::stop_raw_state_monitoring,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

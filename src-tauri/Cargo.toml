@@ -50,4 +50,5 @@ sha2 = "0.10"
 # HID device support
 hidapi = "2.6"
 hex = "0.4"
+once_cell = "1.18"
 

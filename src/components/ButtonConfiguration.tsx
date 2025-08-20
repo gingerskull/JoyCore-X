@@ -13,6 +13,13 @@ import { Separator } from '@/components/ui/separator';
 import { ButtonStateBadge } from '@/components/ButtonStateBadge';
 import { useDeviceContext } from '@/contexts/DeviceContext';
 
+// Raw state components
+import { useRawPinState } from '@/hooks/useRawPinState';
+import { GpioPinGrid } from '@/components/RawPinStateBadge';
+import { MatrixStateGrid } from '@/components/MatrixStateGrid';
+import { ShiftRegisterArray } from '@/components/ShiftRegisterDisplay';
+import { RAW_STATE_CONFIG } from '@/lib/dev-config';
+
 import type { DeviceStatus, ParsedButtonConfig } from '@/lib/types';
 
 interface ButtonConfigurationProps {
@@ -101,12 +108,15 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
   // Removed active usage to avoid unnecessary re-renders / lint warnings.
   const [lastNonZeroButtons, setLastNonZeroButtons] = useState<number | null>(null);
   // Track last log time to avoid spamming console which can add UI latency
-  const lastLogRef = useRef<number>(0);
+  // const lastLogRef = useRef<number>(0); // Reserved for future use
   const [noHidActivity, setNoHidActivity] = useState(false);
   const { isConnected: contextIsConnected } = useDeviceContext();
   
   // Use context connection state if not provided via props
   const connected = isConnected || contextIsConnected;
+
+  // Raw hardware state hook
+  const rawState = useRawPinState();
 
   const handleEnabledChange = (buttonId: number, checked: boolean) => {
     const button = parsedButtons.find(b => b.id === buttonId);
@@ -598,6 +608,86 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
             </ScrollArea>
           </div>
         </div>
+
+        {/* Raw Hardware State Display */}
+        {rawState.isEnabled && (
+          <>
+            <Separator className="my-6" />
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Raw Hardware States</h3>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className={`w-2 h-2 rounded-full ${rawState.isMonitoring ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                  <span>{rawState.isMonitoring ? 'Monitoring' : 'Stopped'}</span>
+                </div>
+              </div>
+
+              {rawState.error && (
+                <div className="p-3 rounded border border-red-500/40 bg-red-500/10 text-red-600 text-sm">
+                  {rawState.error}
+                </div>
+              )}
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                {/* GPIO Pin States */}
+                <div className="space-y-3">
+                  <h4 className="text-md font-medium">GPIO Pin States</h4>
+                  {rawState.gpioStates !== null ? (
+                    <GpioPinGrid
+                      gpioMask={rawState.gpioStates}
+                      pinLabels={groupedButtons.direct.reduce((acc, { info }) => {
+                        if (info.index !== undefined) {
+                          acc[info.index] = info.label;
+                        }
+                        return acc;
+                      }, {} as Record<number, string>)}
+                      activePins={groupedButtons.direct.map(({ info }) => info.index).filter(Boolean) as number[]}
+                    />
+                  ) : (
+                    <div className="text-center text-gray-500 py-4">
+                      <p className="text-sm">No GPIO data available</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Matrix State */}
+                {groupedButtons.matrix.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-md font-medium">Button Matrix</h4>
+                    <MatrixStateGrid
+                      matrixState={rawState.matrixStates}
+                      rows={matrixDimensions.rows}
+                      cols={matrixDimensions.cols}
+                    />
+                  </div>
+                )}
+
+                {/* Shift Register States */}
+                <div className="space-y-3 lg:col-span-2">
+                  <h4 className="text-md font-medium">Shift Registers</h4>
+                  <ShiftRegisterArray
+                    shiftRegStates={rawState.shiftRegStates}
+                    registerLabels={groupedButtons.shiftreg.reduce((acc, { info }) => {
+                      if (info.register !== undefined && info.bit !== undefined) {
+                        if (!acc[info.register]) acc[info.register] = [];
+                        acc[info.register][info.bit] = info.label;
+                      }
+                      return acc;
+                    }, {} as Record<number, string[]>)}
+                  />
+                </div>
+              </div>
+
+              {/* Developer Controls (only show if enabled) */}
+              {RAW_STATE_CONFIG.enableConsoleAPI && (
+                <div className="mt-4 p-3 bg-gray-50 rounded border text-xs text-gray-600">
+                  <p className="font-medium mb-1">Developer API Available:</p>
+                  <p>Use <code className="bg-gray-200 px-1 rounded">window.__rawState</code> in browser console for debugging</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

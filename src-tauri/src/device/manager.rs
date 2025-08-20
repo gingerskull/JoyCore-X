@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{Mutex, RwLock};
+use tokio::time::{interval, Duration};
 use uuid::Uuid;
 use semver::Version;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use crate::serial::{SerialInterface, ConfigProtocol, StorageInfo};
 use crate::update::{UpdateService, VersionCheckResult};
@@ -18,6 +20,8 @@ pub struct DeviceManager {
     connected_device: Arc<Mutex<Option<(Uuid, ConfigProtocol)>>>,
     profile_manager: Arc<Mutex<ProfileManager>>,
     hid_reader: Arc<Mutex<HidReader>>,
+    app_handle: Arc<Mutex<Option<AppHandle>>>,
+    raw_monitoring_active: Arc<AtomicBool>,
 }
 
 impl DeviceManager {
@@ -34,13 +38,18 @@ impl DeviceManager {
             connected_device: Arc::new(Mutex::new(None)),
             profile_manager: Arc::new(Mutex::new(ProfileManager::new())),
             hid_reader: Arc::new(Mutex::new(hid_reader)),
+            app_handle: Arc::new(Mutex::new(None)),
+            raw_monitoring_active: Arc::new(AtomicBool::new(false)),
         }
     }
     
     /// Set the Tauri app handle for event emission
     pub async fn set_app_handle(&self, handle: AppHandle) {
         let hid_reader = self.hid_reader.lock().await;
-        hid_reader.set_app_handle(handle);
+        hid_reader.set_app_handle(handle.clone());
+        
+        let mut app_handle_guard = self.app_handle.lock().await;
+        *app_handle_guard = Some(handle);
     }
 
     /// Discover available JoyCore devices
@@ -714,6 +723,111 @@ impl DeviceManager {
             }
         }
     }
+
+    // Raw hardware state methods
+
+    /// Read raw GPIO states from connected device
+    pub async fn read_raw_gpio_states(&self) -> Result<crate::raw_state::RawGpioStates> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = &mut *connected_guard {
+            crate::raw_state::RawStateReader::read_gpio_states(protocol)
+                .await
+                .map_err(|e| DeviceError::SerialError(crate::serial::SerialError::ProtocolError(e)))
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Read raw matrix states from connected device
+    pub async fn read_raw_matrix_state(&self) -> Result<crate::raw_state::MatrixState> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = &mut *connected_guard {
+            crate::raw_state::RawStateReader::read_matrix_state(protocol)
+                .await
+                .map_err(|e| DeviceError::SerialError(crate::serial::SerialError::ProtocolError(e)))
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Read raw shift register states from connected device
+    pub async fn read_raw_shift_reg_state(&self) -> Result<Vec<crate::raw_state::ShiftRegisterState>> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = &mut *connected_guard {
+            crate::raw_state::RawStateReader::read_shift_reg_state(protocol)
+                .await
+                .map_err(|e| DeviceError::SerialError(crate::serial::SerialError::ProtocolError(e)))
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Read all raw hardware states from connected device
+    pub async fn read_all_raw_states(&self) -> Result<crate::raw_state::RawHardwareState> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = &mut *connected_guard {
+            crate::raw_state::RawStateReader::read_all_states(protocol)
+                .await
+                .map_err(|e| DeviceError::SerialError(crate::serial::SerialError::ProtocolError(e)))
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Start raw state monitoring for connected device
+    pub async fn start_raw_state_monitoring(&self, app_handle: tauri::AppHandle) -> Result<()> {
+        // Check if already monitoring
+        if self.raw_monitoring_active.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+
+        // Set monitoring flag
+        self.raw_monitoring_active.store(true, Ordering::Relaxed);
+
+        // Start background polling loop (using individual commands for now)
+        let connected_device = self.connected_device.clone();
+        let monitoring_active = self.raw_monitoring_active.clone();
+        
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_millis(200)); // Poll every 200ms
+
+            while monitoring_active.load(Ordering::Relaxed) {
+                interval.tick().await;
+                
+                // Read GPIO states
+                {
+                    let mut connected_guard = connected_device.lock().await;
+                    if let Some((_, protocol)) = &mut *connected_guard {
+                        if let Ok(gpio_states) = crate::raw_state::RawStateReader::read_gpio_states(protocol).await {
+                            let _ = app_handle.emit("raw-gpio-changed", &gpio_states);
+                        }
+                        
+                        if let Ok(matrix_state) = crate::raw_state::RawStateReader::read_matrix_state(protocol).await {
+                            let _ = app_handle.emit("raw-matrix-changed", &matrix_state);
+                        }
+                        
+                        if let Ok(shift_states) = crate::raw_state::RawStateReader::read_shift_reg_state(protocol).await {
+                            let _ = app_handle.emit("raw-shift-changed", &shift_states);
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Stop raw state monitoring for connected device
+    pub async fn stop_raw_state_monitoring(&self) -> Result<()> {
+        // Set monitoring flag to stop background loop
+        self.raw_monitoring_active.store(false, Ordering::Relaxed);
+        Ok(())
+    }
+
 }
 
 impl Default for DeviceManager {

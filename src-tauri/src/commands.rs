@@ -606,3 +606,66 @@ pub async fn hid_button_bit_diagnostics(
     // There is no direct existing method; access via hid reader through mapping details path
     Ok(device_manager.hid_button_bit_diagnostics().await)
 }
+
+// Raw hardware state commands
+
+/// Get the current raw state display mode
+#[tauri::command]
+pub async fn get_raw_state_display_mode() -> Result<String, String> {
+    Ok(crate::raw_state::get_display_mode_string())
+}
+
+/// Read current GPIO states from connected device
+#[tauri::command]
+pub async fn read_raw_gpio_states(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<crate::raw_state::RawGpioStates, String> {
+    device_manager.read_raw_gpio_states().await
+        .map_err(|e| format!("Failed to read GPIO states: {}", e))
+}
+
+/// Read current matrix states from connected device
+#[tauri::command]
+pub async fn read_raw_matrix_state(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<crate::raw_state::MatrixState, String> {
+    device_manager.read_raw_matrix_state().await
+        .map_err(|e| format!("Failed to read matrix states: {}", e))
+}
+
+/// Read current shift register states from connected device
+#[tauri::command]
+pub async fn read_raw_shift_reg_state(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Vec<crate::raw_state::ShiftRegisterState>, String> {
+    device_manager.read_raw_shift_reg_state().await
+        .map_err(|e| format!("Failed to read shift register states: {}", e))
+}
+
+/// Read all raw hardware states from connected device
+#[tauri::command]
+pub async fn read_all_raw_states(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<crate::raw_state::RawHardwareState, String> {
+    device_manager.read_all_raw_states().await
+        .map_err(|e| format!("Failed to read all raw states: {}", e))
+}
+
+/// Start raw state monitoring for connected device
+#[tauri::command]
+pub async fn start_raw_state_monitoring(
+    device_manager: State<'_, Arc<DeviceManager>>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    device_manager.start_raw_state_monitoring(app_handle).await
+        .map_err(|e| format!("Failed to start monitoring: {}", e))
+}
+
+/// Stop raw state monitoring for connected device
+#[tauri::command]
+pub async fn stop_raw_state_monitoring(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(), String> {
+    device_manager.stop_raw_state_monitoring().await
+        .map_err(|e| format!("Failed to stop monitoring: {}", e))
+}
