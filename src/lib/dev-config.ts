@@ -3,7 +3,8 @@
 
 export const RAW_STATE_CONFIG = {
   // Display mode control - change this to switch between modes (no UI control)
-  displayMode: 'raw' as 'hid' | 'raw' | 'both',
+  // HID: Show only HID button states, Raw: Show only raw hardware states
+  displayMode: 'raw' as 'hid' | 'raw',
   
   // Performance tuning
   pollingRate: 50,        // milliseconds between polls

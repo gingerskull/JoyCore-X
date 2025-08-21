@@ -29,11 +29,8 @@ export function useRawPinState() {
       .then((mode: string) => {
         setDisplayMode(mode);
         
-        // Only proceed if raw states should be displayed
-        if (mode === 'hid') return;
-        
-        // Start monitoring if needed
-        if (mode === 'raw' || mode === 'both') {
+        // Only start monitoring if we're in raw mode
+        if (mode === 'raw') {
           startMonitoring();
         }
       })
@@ -180,7 +177,7 @@ export function useRawPinState() {
     // Status
     isMonitoring,
     displayMode,
-    isEnabled: displayMode === 'raw' || displayMode === 'both',
+    isEnabled: displayMode === 'raw',
     error,
     
     // Manual read functions

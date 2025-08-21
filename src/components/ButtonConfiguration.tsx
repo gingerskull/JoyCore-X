@@ -15,9 +15,7 @@ import { useDeviceContext } from '@/contexts/DeviceContext';
 
 // Raw state components
 import { useRawPinState } from '@/hooks/useRawPinState';
-import { GpioPinGrid } from '@/components/RawPinStateBadge';
-import { MatrixStateGrid } from '@/components/MatrixStateGrid';
-import { ShiftRegisterArray } from '@/components/ShiftRegisterDisplay';
+import { GpioPinBadge, MatrixConnectionBadge, ShiftRegBitBadge } from '@/components/RawStateBadge';
 import { RAW_STATE_CONFIG } from '@/lib/dev-config';
 
 import type { DeviceStatus, ParsedButtonConfig } from '@/lib/types';
@@ -422,94 +420,231 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {noHidActivity && (
+        {noHidActivity && rawState.displayMode === 'hid' && (
           <div className="mb-4 p-2 rounded border border-yellow-500/40 bg-yellow-500/10 text-xs text-yellow-600 dark:text-yellow-400">
             No HID button activity detected yet. Press any physical button to confirm connection.
           </div>
         )}
+        
         <div className="flex h-[600px] gap-4">
-          {/* Left half - button state visualization */}
+          {/* Left half - monitoring visualization based on mode */}
           <div className="flex-1">
             <ScrollArea className="h-full">
               <div className="space-y-6 p-4">
-                {/* Direct Buttons */}
-                {groupedButtons.direct.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-3">Direct Buttons</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {groupedButtons.direct.map(({ button, info }) => (
-                        <ButtonStateBadge
-                          key={button.id}
-                          label={info.label}
-                          state={getButtonBadgeState(button)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Matrix Buttons */}
-                {groupedButtons.matrix.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-3">Matrix Buttons ({matrixDimensions.rows}x{matrixDimensions.cols})</h3>
-                    <div 
-                      className="grid gap-2"
-                      style={{ 
-                        gridTemplateColumns: `repeat(${matrixDimensions.cols}, 20px)`,
-                        width: 'fit-content'
-                      }}
-                    >
-                      {Array.from({ length: matrixDimensions.rows * matrixDimensions.cols }, (_, index) => {
-                        const row = Math.floor(index / matrixDimensions.cols);
-                        const col = index % matrixDimensions.cols;
-                        const item = groupedButtons.matrix.find(
-                          m => m.info.row === row && m.info.col === col
-                        );
-                        
-                        if (item) {
-                          return (
+                {/* HID Button State Monitoring - Only show in HID mode */}
+                {rawState.displayMode === 'hid' && (
+                  <>
+                    {/* Direct Buttons */}
+                    {groupedButtons.direct.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium mb-3">Direct Buttons</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {groupedButtons.direct.map(({ button, info }) => (
                             <ButtonStateBadge
-                              key={item.button.id}
-                              label={item.info.label}
-                              state={getButtonBadgeState(item.button)}
+                              key={button.id}
+                              label={info.label}
+                              state={getButtonBadgeState(button)}
                             />
-                          );
-                        } else {
-                          // Empty cell
-                          return <div key={`empty-${row}-${col}`} className="w-5 h-5" />;
-                        }
-                      })}
-                    </div>
-                  </div>
-                )}
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                {/* Shift Register Buttons */}
-                {groupedButtons.shiftreg.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-3">Shift Register Buttons</h3>
-                    <div className="space-y-2">
-                      {/* Group by register */}
-                      {Array.from(new Set(groupedButtons.shiftreg.map(s => s.info.register || 0))).map(register => {
-                        const registerButtons = groupedButtons.shiftreg.filter(
-                          s => s.info.register === register
-                        );
-                        return (
-                          <div key={`shiftreg-${register}`}>
-                            <div className="text-xs text-muted-foreground mb-1">Register {register}</div>
-                            <div className="flex flex-wrap gap-2">
-                              {registerButtons.map(({ button, info }) => (
+                    {/* Matrix Buttons */}
+                    {groupedButtons.matrix.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium mb-3">Matrix Buttons ({matrixDimensions.rows}x{matrixDimensions.cols})</h3>
+                        <div 
+                          className="grid gap-2"
+                          style={{ 
+                            gridTemplateColumns: `repeat(${matrixDimensions.cols}, 20px)`,
+                            width: 'fit-content'
+                          }}
+                        >
+                          {Array.from({ length: matrixDimensions.rows * matrixDimensions.cols }, (_, index) => {
+                            const row = Math.floor(index / matrixDimensions.cols);
+                            const col = index % matrixDimensions.cols;
+                            const item = groupedButtons.matrix.find(
+                              m => m.info.row === row && m.info.col === col
+                            );
+                            
+                            if (item) {
+                              return (
                                 <ButtonStateBadge
-                                  key={button.id}
-                                  label={info.label}
-                                  state={getButtonBadgeState(button)}
+                                  key={item.button.id}
+                                  label={item.info.label}
+                                  state={getButtonBadgeState(item.button)}
                                 />
-                              ))}
-                            </div>
+                              );
+                            } else {
+                              // Empty cell
+                              return <div key={`empty-${row}-${col}`} className="w-5 h-5" />;
+                            }
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Shift Register Buttons */}
+                    {groupedButtons.shiftreg.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium mb-3">Shift Register Buttons</h3>
+                        <div className="space-y-2">
+                          {/* Group by register */}
+                          {Array.from(new Set(groupedButtons.shiftreg.map(s => s.info.register || 0))).map(register => {
+                            const registerButtons = groupedButtons.shiftreg.filter(
+                              s => s.info.register === register
+                            );
+                            return (
+                              <div key={`shiftreg-${register}`}>
+                                <div className="text-xs text-muted-foreground mb-1">Register {register}</div>
+                                <div className="flex flex-wrap gap-2">
+                                  {registerButtons.map(({ button, info }) => (
+                                    <ButtonStateBadge
+                                      key={button.id}
+                                      label={info.label}
+                                      state={getButtonBadgeState(button)}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                {/* Raw Hardware State Monitoring - Badge Style */}
+                {rawState.displayMode === 'raw' && (
+                  <>
+                    {rawState.error && (
+                      <div className="mb-4 p-3 rounded border border-red-500/40 bg-red-500/10 text-red-600 text-sm">
+                        {rawState.error}
+                      </div>
+                    )}
+
+                    {/* Direct GPIO Pins */}
+                    {groupedButtons.direct.length > 0 && rawState.gpioStates !== null && (
+                      <div>
+                        <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                          Direct GPIO Pins
+                          <div className="flex items-center gap-1 text-xs text-gray-500">
+                            <div className={`w-2 h-2 rounded-full ${rawState.isMonitoring ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                            <span>{rawState.isMonitoring ? 'Monitoring' : 'Stopped'}</span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                        </h3>
+                        <div className="flex flex-wrap gap-2">
+                          {groupedButtons.direct.map(({ info }) => {
+                            if (info.index !== undefined) {
+                              return (
+                                <GpioPinBadge
+                                  key={info.index}
+                                  pin={info.index}
+                                  gpioMask={rawState.gpioStates}
+                                  label={info.label}
+                                />
+                              );
+                            }
+                            return null;
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Matrix Connection States */}
+                    {groupedButtons.matrix.length > 0 && rawState.matrixStates && (
+                      <div>
+                        <h3 className="text-sm font-medium mb-3">Matrix States ({matrixDimensions.rows}x{matrixDimensions.cols})</h3>
+                        <div 
+                          className="grid gap-2"
+                          style={{ 
+                            gridTemplateColumns: `repeat(${matrixDimensions.cols}, 20px)`,
+                            width: 'fit-content'
+                          }}
+                        >
+                          {Array.from({ length: matrixDimensions.rows * matrixDimensions.cols }, (_, index) => {
+                            const row = Math.floor(index / matrixDimensions.cols);
+                            const col = index % matrixDimensions.cols;
+                            
+                            // Check if this position has a configured button
+                            const hasButton = groupedButtons.matrix.some(
+                              m => m.info.row === row && m.info.col === col
+                            );
+                            
+                            // Get connection state from raw data
+                            const connection = rawState.matrixStates.connections.find(
+                              c => c.row === row && c.col === col
+                            );
+                            const isConnected = connection?.is_connected || false;
+                            
+                            if (hasButton) {
+                              return (
+                                <MatrixConnectionBadge
+                                  key={`matrix-${row}-${col}`}
+                                  row={row}
+                                  col={col}
+                                  isConnected={isConnected}
+                                />
+                              );
+                            } else {
+                              // Empty cell for positions without configured buttons
+                              return <div key={`empty-${row}-${col}`} className="w-5 h-5" />;
+                            }
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Shift Register Bits */}
+                    {groupedButtons.shiftreg.length > 0 && rawState.shiftRegStates.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium mb-3">Shift Register Bits</h3>
+                        <div className="space-y-2">
+                          {/* Group by register */}
+                          {Array.from(new Set(groupedButtons.shiftreg.map(s => s.info.register || 0))).map(registerId => {
+                            const registerButtons = groupedButtons.shiftreg.filter(
+                              s => s.info.register === registerId
+                            );
+                            const registerState = rawState.shiftRegStates.find(r => r.register_id === registerId);
+                            
+                            if (!registerState) return null;
+                            
+                            return (
+                              <div key={`shiftreg-${registerId}`}>
+                                <div className="text-xs text-muted-foreground mb-1">Register {registerId}</div>
+                                <div className="flex flex-wrap gap-2">
+                                  {registerButtons.map(({ info }) => {
+                                    if (info.bit !== undefined) {
+                                      return (
+                                        <ShiftRegBitBadge
+                                          key={`reg-${registerId}-bit-${info.bit}`}
+                                          registerId={registerId}
+                                          bitIndex={info.bit}
+                                          registerValue={registerState.value}
+                                          label={info.label}
+                                        />
+                                      );
+                                    }
+                                    return null;
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Developer Controls (only show if enabled) */}
+                    {RAW_STATE_CONFIG.enableConsoleAPI && (
+                      <div className="mt-4 p-3 bg-gray-50 rounded border text-xs text-gray-600">
+                        <p className="font-medium mb-1">Developer API Available:</p>
+                        <p>Use <code className="bg-gray-200 px-1 rounded">window.__rawState</code> in browser console for debugging</p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </ScrollArea>
@@ -518,7 +653,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
           {/* Vertical separator */}
           <Separator orientation="vertical" className="h-full" />
           
-          {/* Right half - scrollable button list */}
+          {/* Right half - scrollable button list (always visible) */}
           <div className="flex-1">
             <ScrollArea className="h-full">
               <Table>
@@ -608,86 +743,6 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
             </ScrollArea>
           </div>
         </div>
-
-        {/* Raw Hardware State Display */}
-        {rawState.isEnabled && (
-          <>
-            <Separator className="my-6" />
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Raw Hardware States</h3>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <div className={`w-2 h-2 rounded-full ${rawState.isMonitoring ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                  <span>{rawState.isMonitoring ? 'Monitoring' : 'Stopped'}</span>
-                </div>
-              </div>
-
-              {rawState.error && (
-                <div className="p-3 rounded border border-red-500/40 bg-red-500/10 text-red-600 text-sm">
-                  {rawState.error}
-                </div>
-              )}
-
-              <div className="grid gap-6 lg:grid-cols-2">
-                {/* GPIO Pin States */}
-                <div className="space-y-3">
-                  <h4 className="text-md font-medium">GPIO Pin States</h4>
-                  {rawState.gpioStates !== null ? (
-                    <GpioPinGrid
-                      gpioMask={rawState.gpioStates}
-                      pinLabels={groupedButtons.direct.reduce((acc, { info }) => {
-                        if (info.index !== undefined) {
-                          acc[info.index] = info.label;
-                        }
-                        return acc;
-                      }, {} as Record<number, string>)}
-                      activePins={groupedButtons.direct.map(({ info }) => info.index).filter(Boolean) as number[]}
-                    />
-                  ) : (
-                    <div className="text-center text-gray-500 py-4">
-                      <p className="text-sm">No GPIO data available</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Matrix State */}
-                {groupedButtons.matrix.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="text-md font-medium">Button Matrix</h4>
-                    <MatrixStateGrid
-                      matrixState={rawState.matrixStates}
-                      rows={matrixDimensions.rows}
-                      cols={matrixDimensions.cols}
-                    />
-                  </div>
-                )}
-
-                {/* Shift Register States */}
-                <div className="space-y-3 lg:col-span-2">
-                  <h4 className="text-md font-medium">Shift Registers</h4>
-                  <ShiftRegisterArray
-                    shiftRegStates={rawState.shiftRegStates}
-                    registerLabels={groupedButtons.shiftreg.reduce((acc, { info }) => {
-                      if (info.register !== undefined && info.bit !== undefined) {
-                        if (!acc[info.register]) acc[info.register] = [];
-                        acc[info.register][info.bit] = info.label;
-                      }
-                      return acc;
-                    }, {} as Record<number, string[]>)}
-                  />
-                </div>
-              </div>
-
-              {/* Developer Controls (only show if enabled) */}
-              {RAW_STATE_CONFIG.enableConsoleAPI && (
-                <div className="mt-4 p-3 bg-gray-50 rounded border text-xs text-gray-600">
-                  <p className="font-medium mb-1">Developer API Available:</p>
-                  <p>Use <code className="bg-gray-200 px-1 rounded">window.__rawState</code> in browser console for debugging</p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
       </CardContent>
     </Card>
   );

@@ -49,7 +49,18 @@ impl DeviceManager {
         hid_reader.set_app_handle(handle.clone());
         
         let mut app_handle_guard = self.app_handle.lock().await;
-        *app_handle_guard = Some(handle);
+        *app_handle_guard = Some(handle.clone());
+        drop(app_handle_guard); // Release the lock before calling start_raw_state_monitoring
+        
+        // If we're in Raw mode and have a connected device, start raw monitoring now
+        if matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+            let connected_guard = self.connected_device.lock().await;
+            if connected_guard.is_some() {
+                drop(connected_guard); // Release the lock before calling start_raw_state_monitoring
+                let _ = self.start_raw_state_monitoring(handle).await;
+                log::info!("Started raw state monitoring after app handle was set");
+            }
+        }
     }
 
     /// Discover available JoyCore devices
@@ -262,8 +273,23 @@ impl DeviceManager {
                                     *connected_guard = Some((*device_id, protocol));
                                 }
                                 
-                                // Try to connect HID device for button state reading
-                                let _ = self.connect_hid().await;
+                                // Conditionally start monitoring based on display mode
+                                match crate::raw_state::DISPLAY_MODE {
+                                    crate::raw_state::DisplayMode::HID => {
+                                        // Only start HID monitoring
+                                        let _ = self.connect_hid().await;
+                                        log::info!("Started HID monitoring (mode: HID)");
+                                    },
+                                    crate::raw_state::DisplayMode::Raw => {
+                                        // Start raw state monitoring if we have an app handle
+                                        if let Some(app_handle) = &*self.app_handle.lock().await {
+                                            let _ = self.start_raw_state_monitoring(app_handle.clone()).await;
+                                            log::info!("Started raw state monitoring (mode: Raw)");
+                                        } else {
+                                            log::info!("Raw monitoring mode active - will start when app handle is available");
+                                        }
+                                    },
+                                }
                                 
                                 log::info!("Successfully connected to device: {}", device.port_name);
                                 Ok(())
@@ -301,8 +327,19 @@ impl DeviceManager {
             // Disconnect the serial interface
             protocol.interface_mut().disconnect();
             
-            // Disconnect HID device
-            let _ = self.disconnect_hid().await;
+            // Conditionally disconnect monitoring based on display mode
+            match crate::raw_state::DISPLAY_MODE {
+                crate::raw_state::DisplayMode::HID => {
+                    // Only disconnect HID if it was connected
+                    let _ = self.disconnect_hid().await;
+                    log::info!("Disconnected HID monitoring");
+                },
+                crate::raw_state::DisplayMode::Raw => {
+                    // Stop raw state monitoring
+                    let _ = self.stop_raw_state_monitoring().await;
+                    log::info!("Stopped raw state monitoring");
+                },
+            }
             
             // Update device state
             self.update_device_connection_state(&device_id, ConnectionState::Disconnected).await;
@@ -626,6 +663,13 @@ impl DeviceManager {
 
     /// Read button states from HID device
     pub async fn read_button_states(&self) -> Result<ButtonStates> {
+        // Check if we're in HID mode first
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+            return Err(DeviceError::SerialError(
+                crate::serial::SerialError::ProtocolError("HID button states only available in HID mode".to_string())
+            ));
+        }
+        
         let hid_reader = self.hid_reader.lock().await;
         
         // Check if we're connected to a device via serial first
@@ -667,24 +711,36 @@ impl DeviceManager {
 
     /// Debug helper: get selected HID offset and last raw value (if available)
     pub async fn hid_debug_mapping(&self) -> Option<(usize, u64)> {
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+            return None;
+        }
         let hid_reader = self.hid_reader.lock().await;
         hid_reader.debug_hid_mapping().await
     }
 
     /// Debug helper: get last full HID report (len, hex)
     pub async fn hid_full_report(&self) -> Option<(usize, String)> {
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+            return None;
+        }
         let hid_reader = self.hid_reader.lock().await;
         hid_reader.debug_full_report().await
     }
 
     /// Detailed HID mapping info if supported by firmware
     pub async fn hid_mapping_details(&self) -> Option<serde_json::Value> {
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+            return None;
+        }
         let hid_reader = self.hid_reader.lock().await;
         hid_reader.mapping_details().await
     }
 
     /// Diagnostic: raw vs logical button bits (first 16) for offset debugging
     pub async fn hid_button_bit_diagnostics(&self) -> Option<serde_json::Value> {
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+            return None;
+        }
         let hid_reader = self.hid_reader.lock().await;
         hid_reader.debug_button_bit_diagnostics().await
     }
@@ -728,6 +784,13 @@ impl DeviceManager {
 
     /// Read raw GPIO states from connected device
     pub async fn read_raw_gpio_states(&self) -> Result<crate::raw_state::RawGpioStates> {
+        // Check if we're in Raw mode first
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+            return Err(DeviceError::SerialError(
+                crate::serial::SerialError::ProtocolError("Raw GPIO states only available in Raw mode".to_string())
+            ));
+        }
+        
         let mut connected_guard = self.connected_device.lock().await;
         
         if let Some((_, protocol)) = &mut *connected_guard {
@@ -741,6 +804,13 @@ impl DeviceManager {
 
     /// Read raw matrix states from connected device
     pub async fn read_raw_matrix_state(&self) -> Result<crate::raw_state::MatrixState> {
+        // Check if we're in Raw mode first
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+            return Err(DeviceError::SerialError(
+                crate::serial::SerialError::ProtocolError("Raw matrix states only available in Raw mode".to_string())
+            ));
+        }
+        
         let mut connected_guard = self.connected_device.lock().await;
         
         if let Some((_, protocol)) = &mut *connected_guard {
@@ -754,6 +824,13 @@ impl DeviceManager {
 
     /// Read raw shift register states from connected device
     pub async fn read_raw_shift_reg_state(&self) -> Result<Vec<crate::raw_state::ShiftRegisterState>> {
+        // Check if we're in Raw mode first
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+            return Err(DeviceError::SerialError(
+                crate::serial::SerialError::ProtocolError("Raw shift register states only available in Raw mode".to_string())
+            ));
+        }
+        
         let mut connected_guard = self.connected_device.lock().await;
         
         if let Some((_, protocol)) = &mut *connected_guard {
@@ -767,6 +844,13 @@ impl DeviceManager {
 
     /// Read all raw hardware states from connected device
     pub async fn read_all_raw_states(&self) -> Result<crate::raw_state::RawHardwareState> {
+        // Check if we're in Raw mode first
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+            return Err(DeviceError::SerialError(
+                crate::serial::SerialError::ProtocolError("Raw hardware states only available in Raw mode".to_string())
+            ));
+        }
+        
         let mut connected_guard = self.connected_device.lock().await;
         
         if let Some((_, protocol)) = &mut *connected_guard {
@@ -780,6 +864,13 @@ impl DeviceManager {
 
     /// Start raw state monitoring for connected device
     pub async fn start_raw_state_monitoring(&self, app_handle: tauri::AppHandle) -> Result<()> {
+        // Check if we're in Raw mode first
+        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+            return Err(DeviceError::SerialError(
+                crate::serial::SerialError::ProtocolError("Raw state monitoring only available in Raw mode".to_string())
+            ));
+        }
+        
         // Check if already monitoring
         if self.raw_monitoring_active.load(Ordering::Relaxed) {
             return Ok(());
