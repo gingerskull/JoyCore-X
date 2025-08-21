@@ -17,8 +17,9 @@ export const RAW_STATE_CONFIG = {
   
   // Debug options
   logStateChanges: false,
-  showTimestamps: false,
+  showTimestamps: true,
   enableConsoleAPI: true,  // Enables window.__rawState for debugging
+  enableRawEventLogging: true, // Enables per-event console timing logs for raw monitoring
 } as const;
 
 // Types for raw state data

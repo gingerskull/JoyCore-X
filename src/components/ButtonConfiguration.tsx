@@ -115,6 +115,14 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
 
   // Raw hardware state hook
   const rawState = useRawPinState();
+  
+  // Debug raw state (disabled to reduce console noise)
+  useEffect(() => {
+    // Enable for debugging: console.log('Raw state update:', rawState);
+    if (rawState.error) {
+      console.error('Raw state error:', rawState.error);
+    }
+  }, [rawState]);
 
   const handleEnabledChange = (buttonId: number, checked: boolean) => {
     const button = parsedButtons.find(b => b.id === buttonId);
@@ -158,6 +166,9 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
   useEffect(() => {
     if (!connected) return;
     
+    // Only set up HID listeners if we're in HID mode
+    if (rawState.displayMode !== 'hid') return;
+    
     let unlistenButton: (() => void) | null = null;
     let unlistenSync: (() => void) | null = null;
     
@@ -175,10 +186,10 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
       
       // Listen for button change events
       unlistenButton = await listen<ButtonEvent>('button-changed', (event) => {
-        const { button_id, pressed, timestamp } = event.payload;
+        const { button_id, pressed } = event.payload;
         const now = performance.now();
         
-        console.log(`[FRONTEND EVENT] Button ${button_id} ${pressed ? 'pressed' : 'released'} at ${timestamp}`);
+        // Debug: console.log(`[FRONTEND EVENT] Button ${button_id} ${pressed ? 'pressed' : 'released'} at ${timestamp}`);
         
         // Update button mask
         const mask = button_id < 32 ? (1 << button_id) : Math.pow(2, button_id);
@@ -222,7 +233,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
               pendingFrameRef.current = false;
               displayedMaskRef.current = maskToDisplay;
               setButtonMask(maskToDisplay);
-              console.log(`[FRONTEND UI] Updated display to: 0x${maskToDisplay.toString(16)}`);
+              // Debug: console.log(`[FRONTEND UI] Updated display to: 0x${maskToDisplay.toString(16)}`);
             });
           }
         }
@@ -230,8 +241,8 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
       
       // Listen for periodic state sync events
       unlistenSync = await listen<ButtonStates>('button-state-sync', (event) => {
-        const { buttons, timestamp } = event.payload;
-        console.log(`[FRONTEND SYNC] State sync received: 0x${buttons.toString(16)} at ${timestamp}`);
+        const { buttons } = event.payload;
+        // Debug: console.log(`[FRONTEND SYNC] State sync received: 0x${buttons.toString(16)} at ${timestamp}`);
         
         // Update state to match backend
         latestMaskRef.current = buttons;
@@ -266,7 +277,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
         unlistenSync();
       }
     };
-  }, [connected]);
+  }, [connected, rawState.displayMode]);
 
   // Derived pressed set memoized (avoids repeated bit math in render for many buttons)
   const pressedSet = useMemo(() => {
@@ -574,7 +585,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                             );
                             
                             // Get connection state from raw data
-                            const connection = rawState.matrixStates.connections.find(
+                            const connection = rawState.matrixStates?.connections.find(
                               c => c.row === row && c.col === col
                             );
                             const isConnected = connection?.is_connected || false;

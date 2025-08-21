@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{interval, Duration};
 use uuid::Uuid;
 use semver::Version;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 use crate::serial::{SerialInterface, ConfigProtocol, StorageInfo};
 use crate::update::{UpdateService, VersionCheckResult};
@@ -15,6 +14,7 @@ use super::{Device, ConnectionState, ProfileManager, DeviceError, Result, Firmwa
 
 /// Central device management system
 /// Handles device discovery, connection management, and configuration
+#[derive(Clone)]
 pub struct DeviceManager {
     devices: Arc<RwLock<HashMap<Uuid, Device>>>,
     connected_device: Arc<Mutex<Option<(Uuid, ConfigProtocol)>>>,
@@ -520,15 +520,35 @@ impl DeviceManager {
 
     /// Read raw binary configuration from device
     pub async fn read_config_binary(&self) -> Result<Vec<u8>> {
+        // Temporarily pause monitoring to prevent data contamination
+        let was_monitoring = self.is_raw_state_monitoring().await;
+        if was_monitoring {
+            log::info!("Temporarily stopping monitoring for config read");
+            let _ = self.stop_raw_state_monitoring().await;
+        }
+        
         let mut connected_guard = self.connected_device.lock().await;
         
-        if let Some((_, protocol)) = connected_guard.as_mut() {
+        let result = if let Some((_, protocol)) = connected_guard.as_mut() {
             let data = protocol.read_file("/config.bin").await
                 .map_err(DeviceError::SerialError)?;
             Ok(data)
         } else {
             Err(DeviceError::NotConnected)
+        };
+        
+        // Drop the lock before restarting monitoring
+        drop(connected_guard);
+        
+        // Restart monitoring if it was running
+        if was_monitoring {
+            if let Some(app_handle) = self.app_handle.lock().await.as_ref() {
+                log::info!("Restarting monitoring after config read");
+                let _ = self.start_raw_state_monitoring(app_handle.clone()).await;
+            }
         }
+        
+        result
     }
 
     /// Write raw binary configuration to device
@@ -541,9 +561,16 @@ impl DeviceManager {
         let validated_data = config.to_bytes()
             .map_err(|e| DeviceError::ProtocolError(format!("Failed to serialize config: {}", e)))?;
         
+        // Temporarily pause monitoring to prevent data contamination
+        let was_monitoring = self.is_raw_state_monitoring().await;
+        if was_monitoring {
+            log::info!("Temporarily stopping monitoring for config write");
+            let _ = self.stop_raw_state_monitoring().await;
+        }
+        
         let mut connected_guard = self.connected_device.lock().await;
         
-        if let Some((_, protocol)) = connected_guard.as_mut() {
+        let result = if let Some((_, protocol)) = connected_guard.as_mut() {
             // The firmware automatically creates a backup before writing
             protocol.write_raw_file("/config.bin", &validated_data).await
                 .map_err(DeviceError::SerialError)?;
@@ -551,7 +578,20 @@ impl DeviceManager {
             Ok(())
         } else {
             Err(DeviceError::NotConnected)
+        };
+        
+        // Drop the lock before restarting monitoring
+        drop(connected_guard);
+        
+        // Restart monitoring if it was running
+        if was_monitoring {
+            if let Some(app_handle) = self.app_handle.lock().await.as_ref() {
+                log::info!("Restarting monitoring after config write");
+                let _ = self.start_raw_state_monitoring(app_handle.clone()).await;
+            }
         }
+        
+        result
     }
 
     /// Delete configuration file (forces regeneration on next boot)
@@ -879,44 +919,103 @@ impl DeviceManager {
         // Set monitoring flag
         self.raw_monitoring_active.store(true, Ordering::Relaxed);
 
-        // Start background polling loop (using individual commands for now)
-        let connected_device = self.connected_device.clone();
-        let monitoring_active = self.raw_monitoring_active.clone();
-        
-        tokio::spawn(async move {
-            let mut interval = interval(Duration::from_millis(200)); // Poll every 200ms
-
-            while monitoring_active.load(Ordering::Relaxed) {
-                interval.tick().await;
-                
-                // Read GPIO states
-                {
-                    let mut connected_guard = connected_device.lock().await;
-                    if let Some((_, protocol)) = &mut *connected_guard {
-                        if let Ok(gpio_states) = crate::raw_state::RawStateReader::read_gpio_states(protocol).await {
-                            let _ = app_handle.emit("raw-gpio-changed", &gpio_states);
-                        }
-                        
-                        if let Ok(matrix_state) = crate::raw_state::RawStateReader::read_matrix_state(protocol).await {
-                            let _ = app_handle.emit("raw-matrix-changed", &matrix_state);
-                        }
-                        
-                        if let Ok(shift_states) = crate::raw_state::RawStateReader::read_shift_reg_state(protocol).await {
-                            let _ = app_handle.emit("raw-shift-changed", &shift_states);
-                        }
-                    }
-                }
+        // Use the new continuous monitoring system
+        let device_id = {
+            let connected_guard = self.connected_device.lock().await;
+            if let Some((id, _)) = &*connected_guard {
+                id.to_string()
+            } else {
+                return Err(DeviceError::NotConnected);
             }
-        });
+        };
+
+        log::info!("Starting raw state monitoring for device {} using new monitoring system", device_id);
+
+        // Use the new unified monitoring system with 50ms polling and continuous monitoring capabilities
+        let monitor = crate::raw_state::monitor::get_monitor();
+        monitor.start_monitoring_with_protocol(
+            device_id, 
+            app_handle, 
+            std::sync::Arc::new(self.clone())
+        ).await.map_err(|e| {
+            log::error!("Failed to start new monitoring system: {}", e);
+            self.raw_monitoring_active.store(false, Ordering::Relaxed);
+            DeviceError::SerialError(crate::serial::SerialError::ProtocolError(e))
+        })?;
+
+        log::info!("New monitoring system started successfully");
 
         Ok(())
+    }
+
+    /// Check if raw state monitoring is currently active
+    pub async fn is_raw_state_monitoring(&self) -> bool {
+        self.raw_monitoring_active.load(Ordering::Relaxed)
     }
 
     /// Stop raw state monitoring for connected device
     pub async fn stop_raw_state_monitoring(&self) -> Result<()> {
         // Set monitoring flag to stop background loop
         self.raw_monitoring_active.store(false, Ordering::Relaxed);
+        
+        // Stop through monitor module
+        let device_id = {
+            let connected_guard = self.connected_device.lock().await;
+            if let Some((id, _)) = &*connected_guard {
+                id.to_string()
+            } else {
+                return Ok(()); // Already disconnected
+            }
+        };
+        
+        let monitor = crate::raw_state::monitor::get_monitor();
+        let _ = monitor.stop_monitoring(&device_id).await;
+        
         Ok(())
+    }
+
+    /// Get access to connected protocol for monitoring (internal use)
+    pub(crate) async fn get_connected_protocol_for_monitoring(&self) -> Result<()> {
+        let connected_guard = self.connected_device.lock().await;
+        if connected_guard.is_some() {
+            Ok(())
+        } else {
+            Err(DeviceError::NotConnected)
+        }
+    }
+
+    /// Send a raw monitor command
+    pub(crate) async fn send_raw_monitor_command(&self, command: &str) -> std::result::Result<String, String> {
+        let mut connected_guard = self.connected_device.lock().await;
+        
+        if let Some((_, protocol)) = &mut *connected_guard {
+            protocol.interface_mut().send_command(command).await
+                .map_err(|e| format!("Command failed: {}", e))
+        } else {
+            Err("No device connected".to_string())
+        }
+    }
+
+    /// Read monitor data (non-blocking) - reads directly from serial port
+    pub(crate) async fn read_monitor_data(&self, timeout_ms: u64) -> std::result::Result<String, String> {
+    let mut connected_guard = self.connected_device.lock().await;
+        if let Some((_, protocol)) = &mut *connected_guard {
+            // Read directly from serial port since firmware sends continuous stream
+            let mut buffer = vec![0u8; 1024]; // Buffer for incoming data
+            match protocol.interface_mut().read_data(&mut buffer, timeout_ms).await {
+                Ok(bytes_read) => {
+                    if bytes_read > 0 {
+                        buffer.truncate(bytes_read);
+                        Ok(String::from_utf8_lossy(&buffer).to_string())
+                    } else {
+                        Ok(String::new())
+                    }
+                }
+        Err(_e) => Ok(String::new()), // No data available
+            }
+        } else {
+            Err("No device connected".to_string())
+        }
     }
 
 }

@@ -1,6 +1,7 @@
 pub mod types;
 pub mod parser;
 pub mod reader;
+pub mod monitor;
 
 pub use types::*;
 pub use reader::*;
@@ -18,8 +19,9 @@ pub enum DisplayMode {
 pub const DISPLAY_MODE: DisplayMode = DisplayMode::Raw;
 
 // Performance configuration
-pub const RAW_STATE_POLLING_MS: u64 = 50;
+pub const RAW_STATE_POLLING_MS: u64 = 50; // Firmware sends updates every 50ms in continuous mode
 pub const ENABLE_DEBUG_LOGGING: bool = false;
+pub const ENABLE_PERFORMANCE_METRICS: bool = false;
 
 // Helper function to get display mode as string for frontend
 pub fn get_display_mode_string() -> String {

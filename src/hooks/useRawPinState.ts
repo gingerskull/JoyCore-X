@@ -63,20 +63,71 @@ export function useRawPinState() {
       setError(null);
       
       // Subscribe to events first
+      let lastGpioLog = 0;
       const unsubscribeGpio = await listen<RawGpioStates>('raw-gpio-changed', (event) => {
         setGpioStates(event.payload.gpio_mask);
+        if (RAW_STATE_CONFIG.enableRawEventLogging) {
+          const now = performance.now();
+            const delta = lastGpioLog === 0 ? 0 : (now - lastGpioLog);
+            lastGpioLog = now;
+            // Using console.debug to reduce noise; switch to log if needed
+            console.debug('[RAW_EVT][GPIO]', {
+              t_ms: now.toFixed(3),
+              delta_ms: delta.toFixed(3),
+              mask_hex: '0x' + event.payload.gpio_mask.toString(16).padStart(8,'0')
+            });
+        }
       });
 
+      let lastMatrixLog = 0;
       const unsubscribeMatrix = await listen<MatrixState>('raw-matrix-changed', (event) => {
         setMatrixStates(event.payload);
+        if (RAW_STATE_CONFIG.enableRawEventLogging) {
+          const now = performance.now();
+          const delta = lastMatrixLog === 0 ? 0 : (now - lastMatrixLog);
+          lastMatrixLog = now;
+          console.debug('[RAW_EVT][MATRIX]', {
+            t_ms: now.toFixed(3),
+            delta_ms: delta.toFixed(3),
+            connections: event.payload.connections.length
+          });
+        }
       });
 
+      let lastShiftLog = 0;
       const unsubscribeShift = await listen<ShiftRegisterState[]>('raw-shift-changed', (event) => {
-        setShiftRegStates(event.payload);
+        // Merge incremental shift register updates (backend emits one register per event)
+        setShiftRegStates(prev => {
+          if (!event.payload || event.payload.length === 0) return prev;
+          // Build map of existing states
+          const map = new Map<number, ShiftRegisterState>();
+          for (const r of prev) map.set(r.register_id, r);
+          // Apply updates
+            for (const upd of event.payload) {
+              map.set(upd.register_id, upd);
+            }
+          return Array.from(map.values()).sort((a,b)=>a.register_id - b.register_id);
+        });
+        if (RAW_STATE_CONFIG.enableRawEventLogging) {
+          const now = performance.now();
+          const delta = lastShiftLog === 0 ? 0 : (now - lastShiftLog);
+          lastShiftLog = now;
+          console.debug('[RAW_EVT][SHIFT]', {
+            t_ms: now.toFixed(3),
+            delta_ms: delta.toFixed(3),
+            registers: event.payload.map(r => ({ id: r.register_id, value: '0x'+r.value.toString(16).padStart(2,'0')}))
+          });
+        }
       });
 
-      // Start firmware monitoring
-      await invoke('start_raw_state_monitoring');
+      // Start firmware monitoring - it might already be running
+      try {
+        await invoke('start_raw_state_monitoring');
+      } catch (startErr) {
+        // If monitoring is already running, that's OK
+        console.warn('Note: Monitoring might already be running:', startErr);
+      }
+      
       setIsMonitoring(true);
 
       // Store unsubscribe functions for cleanup

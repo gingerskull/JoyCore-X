@@ -1,6 +1,7 @@
 use std::time::Duration;
 use serialport::SerialPort;
 use tokio::time::timeout;
+use tokio::sync::mpsc;
 
 use super::{Result, SerialError, SerialDeviceInfo};
 
@@ -13,9 +14,28 @@ pub const BAUD_RATE: u32 = 115200;
 pub const IDENTIFY_TIMEOUT_MS: u64 = 500;
 pub const PORT_OPEN_DELAY_MS: u64 = 100;
 
+// Raw state monitoring constants
+pub const MONITOR_TIMEOUT_MS: u64 = 5000;
+pub const MONITOR_PREFIXES: &[&str] = &[
+    "GPIO_STATES:",
+    "MATRIX_STATE:",
+    "SHIFT_REG:",
+    "OK:RAW_MONITOR",
+];
+
+// Message routing for unified reader
+// (Future enhancement: could use enum for more sophisticated routing)
+
 pub struct SerialInterface {
     port: Option<Box<dyn SerialPort>>,
     device_info: Option<SerialDeviceInfo>,
+    // Unified reader channels
+    monitor_tx: Option<mpsc::UnboundedSender<String>>,
+    monitor_rx: Option<mpsc::UnboundedReceiver<String>>,
+    command_tx: Option<mpsc::UnboundedSender<String>>,
+    command_rx: Option<mpsc::UnboundedReceiver<String>>,
+    // Reader task handle for cleanup
+    reader_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl SerialInterface {
@@ -23,6 +43,11 @@ impl SerialInterface {
         Self {
             port: None,
             device_info: None,
+            monitor_tx: None,
+            monitor_rx: None,
+            command_tx: None,
+            command_rx: None,
+            reader_task: None,
         }
     }
 
@@ -95,6 +120,9 @@ impl SerialInterface {
         self.port = Some(port);
         self.device_info = Some(device_info);
         
+        // Start unified reader for streaming
+        self.start_unified_reader()?;
+        
         log::info!("Connected to JoyCore device on {}", port_name);
         Ok(())
     }
@@ -109,6 +137,9 @@ impl SerialInterface {
         self.port = Some(port);
         self.device_info = Some(device_info.clone());
         
+        // Start unified reader for streaming
+        self.start_unified_reader()?;
+        
         log::info!("Connected to JoyCore device on {}", device_info.port_name);
         Ok(())
     }
@@ -118,6 +149,18 @@ impl SerialInterface {
         if let Some(device) = &self.device_info {
             log::info!("Disconnecting from {}", device.port_name);
         }
+        
+        // Stop unified reader
+        if let Some(task) = self.reader_task.take() {
+            task.abort();
+        }
+        
+        // Clean up channels
+        self.monitor_tx = None;
+        self.monitor_rx = None;
+        self.command_tx = None;
+        self.command_rx = None;
+        
         self.port = None;
         self.device_info = None;
     }
@@ -189,13 +232,13 @@ impl SerialInterface {
             .map_err(|_| SerialError::Timeout)?
     }
 
-    /// Send a command and wait for response
+    /// Send a command and wait for response with message routing
     pub async fn send_command(&mut self, command: &str) -> Result<String> {
         log::debug!("Sending command: {}", command);
         let command_with_newline = format!("{}\n", command);
         self.send_data(command_with_newline.as_bytes()).await?;
 
-        // Use larger buffer and line-by-line reading similar to Python implementation
+        // Use larger buffer and line-by-line reading with message routing
         let mut response_lines = Vec::new();
         let mut accumulated_data = Vec::new();
         let start_time = std::time::Instant::now();
@@ -212,13 +255,18 @@ impl SerialInterface {
                     if bytes_read > 0 {
                         accumulated_data.extend_from_slice(&buffer[..bytes_read]);
                         
-                        // Process complete lines
+                        // Process complete lines with routing
                         while let Some(line_end) = accumulated_data.iter().position(|&b| b == b'\n' || b == b'\r') {
                             let line_bytes = accumulated_data.drain(..=line_end).collect::<Vec<u8>>();
                             let line = String::from_utf8_lossy(&line_bytes).trim().to_string();
                             
                             if !line.is_empty() {
                                 log::debug!("Received line: {}", line);
+                                
+                                // Route monitor lines to monitor channel
+                                self.route_message_if_needed(&line);
+                                
+                                // Always add to response for command processing
                                 response_lines.push(line.clone());
                                 
                                 // Check for termination conditions like Python script
@@ -249,6 +297,7 @@ impl SerialInterface {
         if !accumulated_data.is_empty() {
             let line = String::from_utf8_lossy(&accumulated_data).trim().to_string();
             if !line.is_empty() {
+                self.route_message_if_needed(&line);
                 response_lines.push(line);
             }
         }
@@ -256,6 +305,98 @@ impl SerialInterface {
         let full_response = response_lines.join("\n");
         log::debug!("Complete response ({} lines): {}", response_lines.len(), full_response);
         Ok(full_response)
+    }
+
+    /// Read a line from the device with timeout (for streaming)
+    pub async fn read_line_timeout(&mut self, timeout_ms: u64) -> Result<String> {
+        let mut buffer = [0u8; 1024];
+        let bytes_read = self.read_data(&mut buffer, timeout_ms).await?;
+        
+        if bytes_read > 0 {
+            Ok(String::from_utf8_lossy(&buffer[..bytes_read]).to_string())
+        } else {
+            Ok(String::new())
+        }
+    }
+
+    /// Read a line from the monitor stream with timeout
+    pub async fn read_monitor_bytes(&mut self, timeout_ms: u64) -> Result<Vec<u8>> {
+        if crate::raw_state::ENABLE_DEBUG_LOGGING {
+            log::trace!("read_monitor_bytes called (timeout_ms={})", timeout_ms);
+        }
+        
+        // Ensure channels exist
+        if self.monitor_rx.is_none() {
+            log::warn!("Monitor channel not initialized - unified reader may not be running");
+            return Ok(Vec::new());
+        }
+        
+        let rx = self.monitor_rx.as_mut().unwrap();
+        let start_time = std::time::Instant::now();
+        
+        match timeout(Duration::from_millis(timeout_ms), rx.recv()).await {
+            Ok(Some(line)) => {
+                let bytes = line.into_bytes();
+                let elapsed = start_time.elapsed();
+                
+                if crate::raw_state::ENABLE_DEBUG_LOGGING {
+                    log::trace!("read_monitor_bytes returning {} bytes after {:?}", bytes.len(), elapsed);
+                }
+                
+                if crate::raw_state::ENABLE_PERFORMANCE_METRICS && elapsed.as_millis() > 20 {
+                    log::debug!("Monitor read took longer than expected: {:?}", elapsed);
+                }
+                
+                Ok(bytes)
+            }
+            Ok(None) => {
+                if crate::raw_state::ENABLE_DEBUG_LOGGING {
+                    log::trace!("read_monitor_bytes returning 0 bytes (channel closed)");
+                }
+                Ok(Vec::new())
+            }
+            Err(_) => {
+                if crate::raw_state::ENABLE_DEBUG_LOGGING {
+                    log::trace!("read_monitor_bytes returning 0 bytes (timeout after {:?})", start_time.elapsed());
+                }
+                Ok(Vec::new())
+            }
+        }
+    }
+
+    /// Start the unified reader by setting up channels
+    fn start_unified_reader(&mut self) -> Result<()> {
+        if self.port.is_none() {
+            return Err(SerialError::ConnectionFailed("No port available".to_string()));
+        }
+
+        // Create channels for routing messages
+        let (monitor_tx, monitor_rx) = mpsc::unbounded_channel();
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+
+        self.monitor_tx = Some(monitor_tx);
+        self.monitor_rx = Some(monitor_rx);
+        self.command_tx = Some(command_tx);
+        self.command_rx = Some(command_rx);
+        
+        log::info!("Initialized unified serial reader channels");
+        Ok(())
+    }
+
+    /// Route a message to the appropriate channel if monitor-related
+    fn route_message_if_needed(&mut self, line: &str) {
+        let line_trimmed = line.trim();
+        
+        // Check if this is a monitor line
+        let is_monitor = MONITOR_PREFIXES.iter().any(|prefix| line_trimmed.starts_with(prefix));
+        
+        if is_monitor {
+            if let Some(monitor_tx) = &self.monitor_tx {
+                if let Err(e) = monitor_tx.send(line.to_string()) {
+                    log::warn!("Failed to route monitor line: {}", e);
+                }
+            }
+        }
     }
 
     /// Identify a device on the given port using IDENTIFY command
@@ -356,6 +497,7 @@ impl SerialInterface {
         
         None
     }
+
 }
 
 impl Default for SerialInterface {

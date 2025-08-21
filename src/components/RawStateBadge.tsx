@@ -94,7 +94,6 @@ interface MatrixConnectionBadgeProps {
 }
 
 export function MatrixConnectionBadge({ row, col, isConnected, className }: MatrixConnectionBadgeProps) {
-  const label = `${row},${col}`;
   const tooltip = `Row ${row}, Col ${col}: ${isConnected ? 'Connected' : 'Open'}`;
 
   return (
