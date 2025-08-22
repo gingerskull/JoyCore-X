@@ -9,8 +9,7 @@ impl RawStateReader {
     /// Read current GPIO states from device
     pub async fn read_gpio_states(protocol: &mut ConfigProtocol) -> Result<RawGpioStates, String> {
         // Send command via the interface
-        let response = protocol.interface_mut().send_command("READ_GPIO_STATES").await
-            .map_err(|e| format!("Failed to send GPIO command: {}", e))?;
+    let response = protocol.send_locked("READ_GPIO_STATES").await.map_err(|e| format!("Failed to send GPIO command: {}", e))?;
 
         // Parse response
         parse_gpio_response(&response)
@@ -20,8 +19,7 @@ impl RawStateReader {
     /// Read current matrix states from device
     pub async fn read_matrix_state(protocol: &mut ConfigProtocol) -> Result<MatrixState, String> {
         // Send command and get response (the send_command method handles multiple lines)
-        let response = protocol.interface_mut().send_command("READ_MATRIX_STATE").await
-            .map_err(|e| format!("Failed to send matrix command: {}", e))?;
+    let response = protocol.send_locked("READ_MATRIX_STATE").await.map_err(|e| format!("Failed to send matrix command: {}", e))?;
 
         // Split response into lines for parsing
         let lines: Vec<String> = response.lines().map(|s| s.to_string()).collect();
@@ -46,8 +44,7 @@ impl RawStateReader {
     /// Read current shift register states from device
     pub async fn read_shift_reg_state(protocol: &mut ConfigProtocol) -> Result<Vec<ShiftRegisterState>, String> {
         // Send command and get response
-        let response = protocol.interface_mut().send_command("READ_SHIFT_REG").await
-            .map_err(|e| format!("Failed to send shift register command: {}", e))?;
+    let response = protocol.send_locked("READ_SHIFT_REG").await.map_err(|e| format!("Failed to send shift register command: {}", e))?;
 
         // Split response into lines for parsing
         let lines: Vec<String> = response.lines().map(|s| s.to_string()).collect();
@@ -110,8 +107,7 @@ impl RawStateReader {
     /// Start raw state monitoring on device
     pub async fn start_monitoring(protocol: &mut ConfigProtocol) -> Result<(), String> {
         // Send start command
-        let response = protocol.interface_mut().send_command("START_RAW_MONITOR").await
-            .map_err(|e| format!("Failed to start monitoring: {}", e))?;
+    let response = protocol.send_locked("START_RAW_MONITOR").await.map_err(|e| format!("Failed to start monitoring: {}", e))?;
 
         if response.contains("OK:RAW_MONITOR_STARTED") {
             Ok(())
@@ -123,8 +119,7 @@ impl RawStateReader {
     /// Stop raw state monitoring on device
     pub async fn stop_monitoring(protocol: &mut ConfigProtocol) -> Result<(), String> {
         // Send stop command
-        let response = protocol.interface_mut().send_command("STOP_RAW_MONITOR").await
-            .map_err(|e| format!("Failed to stop monitoring: {}", e))?;
+    let response = protocol.send_locked("STOP_RAW_MONITOR").await.map_err(|e| format!("Failed to stop monitoring: {}", e))?;
 
         if response.contains("OK:RAW_MONITOR_STOPPED") {
             Ok(())

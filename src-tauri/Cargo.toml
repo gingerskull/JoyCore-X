@@ -52,3 +52,6 @@ sha2 = "0.10"
 hidapi = "2.6"
 hex = "0.4"
 
+[features]
+default = []
+
