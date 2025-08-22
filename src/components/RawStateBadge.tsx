@@ -52,7 +52,7 @@ export function RawStateBadge({ mode, state, label, tooltip, className }: RawSta
       className={cn(
         "w-12 h-12 rounded flex items-center justify-center text-[12px] font-mono font-bold transition-colors duration-50 select-none",
         colorSchemes[mode][state],
-        isChanging && "ring-2 ring-yellow-400",
+        isChanging && "",
         className
       )}
       title={tooltip}

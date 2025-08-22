@@ -12,6 +12,7 @@ interface DeviceContextType {
   
   // Actions
   discoverDevices: () => Promise<Device[]>;
+  // Deprecated no-op methods retained temporarily for backward compatibility
   refreshDevices: (withCleanup?: boolean) => Promise<Device[]>;
   refreshDevicesSilently: (withCleanup?: boolean) => Promise<Device[]>;
   connectDevice: (deviceId: string) => Promise<boolean>;

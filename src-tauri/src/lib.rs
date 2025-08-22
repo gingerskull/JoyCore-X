@@ -19,8 +19,8 @@ pub fn run() {
     .manage(device_manager)
     .invoke_handler(tauri::generate_handler![
       commands::discover_devices,
+  commands::force_discover_devices,
       commands::get_devices,
-      commands::cleanup_disconnected_devices,
       commands::connect_device,
       commands::disconnect_device,
       commands::get_connected_device,

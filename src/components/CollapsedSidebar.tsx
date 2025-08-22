@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceConfiguration } from './DeviceConfiguration';
-import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
+import { useFirmwareUpdatesContext } from '@/contexts/FirmwareUpdatesProvider';
 import type { Device, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
 
 interface DevicePinAssignments {
@@ -39,15 +39,7 @@ export function CollapsedSidebar({ onExpand, parsedAxes, parsedButtons, setParse
   const [connectingToId, setConnectingToId] = useState<string | null>(null);
 
   // Get current firmware version from connected device
-  const currentFirmwareVersion = connectedDevice?.device_status?.firmware_version;
-
-  // Use firmware update hook
-  const {
-    hasUpdateAvailable,
-  } = useFirmwareUpdates({
-    currentVersion: currentFirmwareVersion,
-    autoCheck: true,
-  });
+  const { hasUpdateAvailable } = useFirmwareUpdatesContext();
 
   const getDeviceStatusColor = (device: Device) => {
     if (device.connection_state === 'Connected') {

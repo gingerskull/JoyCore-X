@@ -1,12 +1,15 @@
 import { Dashboard } from '@/components/Dashboard'
 import { DeviceProvider } from '@/contexts/DeviceContext'
 import { RawStateConfigProvider } from '@/contexts/RawStateConfigContext'
+import { FirmwareUpdatesProvider } from '@/contexts/FirmwareUpdatesProvider'
 
 function App() {
   return (
     <DeviceProvider>
       <RawStateConfigProvider>
-        <Dashboard />
+        <FirmwareUpdatesProvider>
+          <Dashboard />
+        </FirmwareUpdatesProvider>
       </RawStateConfigProvider>
     </DeviceProvider>
   )

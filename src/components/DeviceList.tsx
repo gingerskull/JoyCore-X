@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { DeviceConfiguration } from './DeviceConfiguration';
-import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
+import { useFirmwareUpdatesContext } from '@/contexts/FirmwareUpdatesProvider';
 import type { Device, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
 
 interface DevicePinAssignments {
@@ -45,17 +45,7 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
   const [connectingToId, setConnectingToId] = useState<string | null>(null);
 
   // Get current firmware version from connected device
-  const currentFirmwareVersion = connectedDevice?.device_status?.firmware_version;
-
-  // Use firmware update hook
-  const {
-    isChecking: isCheckingUpdates,
-    hasUpdateAvailable,
-    latestVersion,
-  } = useFirmwareUpdates({
-    currentVersion: currentFirmwareVersion,
-    autoCheck: true,
-  });
+  const { isChecking: isCheckingUpdates, hasUpdateAvailable, latestVersion } = useFirmwareUpdatesContext();
 
   const handleConnect = async (deviceId: string) => {
     setConnectingToId(deviceId);
@@ -155,7 +145,7 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
             <Badge variant="outline" className="ml-2">v0.1.0</Badge>
           </div>
         </CardHeader>
-        {isConnected && currentFirmwareVersion && (
+  {isConnected && connectedDevice?.device_status?.firmware_version && (
           <CardContent className="pt-0">
             <Button 
               variant="outline" 

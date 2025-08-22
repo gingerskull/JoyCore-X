@@ -133,8 +133,25 @@ export function DeviceConfiguration({
     }
   };
 
-  if (!connectedDevice || !deviceStatus) {
+  if (!connectedDevice) {
     return null;
+  }
+  if (!deviceStatus) {
+    return (
+      <Card className="mt-3 animate-pulse">
+        <CardHeader>
+          <CardTitle className="flex items-center text-sm">
+            <Settings className="w-4 h-4 mr-2" />
+            <span className="truncate">Device Configuration</span>
+          </CardTitle>
+          <CardDescription className="text-xs">Loading device status...</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-4 bg-muted rounded mb-2" />
+          <div className="h-4 bg-muted rounded w-2/3" />
+        </CardContent>
+      </Card>
+    );
   }
 
   if (collapsed) {
