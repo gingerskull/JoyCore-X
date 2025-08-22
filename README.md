@@ -26,6 +26,29 @@ JoyCore-X provides a desktop application for configuring RP2040-based HOTAS cont
 - 🔄 Hardware testing pending
 - ⏳ Advanced features in development
 
+## Unified Serial Architecture (Overview)
+
+The legacy dual-path serial code has been fully removed in favor of a single unified asynchronous command + event pipeline:
+
+- A background reader task parses every inbound line once.
+- Lines are classified as either command response buffer lines or real-time event/monitor lines (GPIO/MATRIX/SHIFT/etc.).
+- High‑level operations build a `CommandSpec` (name, matcher, timeout, optional min-duration) and dispatch it through a `UnifiedSerialHandle`.
+- A `ResponseMatcher` (Contains / UntilPrefix / FixedLines / Custom) determines completion. Metrics (latency, success/failure counts) are collected per command name.
+- Real‑time hardware state updates are broadcast on an event channel for UI consumers to snapshot without blocking command flow.
+
+Benefits:
+1. Single source of truth for serial parsing (no duplicated readers)
+2. Deterministic matching + timeout handling
+3. Built‑in latency instrumentation for future tuning
+4. Clean separation between request/response flows and streaming hardware telemetry
+
+Key Types (Rust backend):
+- `UnifiedSerialBuilder` – constructs the background task + handle
+- `UnifiedSerialHandle` – API surface (send_command, get snapshots, metrics)
+- `CommandSpec` / `ResponseMatcher` – declarative response completion
+
+All prior feature flags (e.g. `unified-serial`) were removed; the unified path is always active.
+
 ## Development Setup
 
 ```bash

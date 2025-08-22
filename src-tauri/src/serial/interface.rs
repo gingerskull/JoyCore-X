@@ -1,6 +1,8 @@
+// (Removed stray spec initialization inserted by patch error)
 use std::time::Duration;
 use serialport::SerialPort;
 use tokio::time::timeout;
+// Removed legacy channel imports
 
 use super::{Result, SerialError, SerialDeviceInfo};
 
@@ -13,9 +15,17 @@ pub const BAUD_RATE: u32 = 115200;
 pub const IDENTIFY_TIMEOUT_MS: u64 = 500;
 pub const PORT_OPEN_DELAY_MS: u64 = 100;
 
+// Raw state monitoring constants
+pub const MONITOR_TIMEOUT_MS: u64 = 5000;
+// Legacy monitor prefixes removed (unified reader classifies internally)
+
+// Message routing for unified reader
+// (Future enhancement: could use enum for more sophisticated routing)
+
 pub struct SerialInterface {
     port: Option<Box<dyn SerialPort>>,
     device_info: Option<SerialDeviceInfo>,
+    // Legacy unified handle storage removed (handle managed externally)
 }
 
 impl SerialInterface {
@@ -23,6 +33,7 @@ impl SerialInterface {
         Self {
             port: None,
             device_info: None,
+            // unified handle now managed by DeviceManager
         }
     }
 
@@ -95,6 +106,8 @@ impl SerialInterface {
         self.port = Some(port);
         self.device_info = Some(device_info);
         
+    // Unified reader now started externally via builder / DeviceManager
+        
         log::info!("Connected to JoyCore device on {}", port_name);
         Ok(())
     }
@@ -108,6 +121,7 @@ impl SerialInterface {
 
         self.port = Some(port);
         self.device_info = Some(device_info.clone());
+    // Unified reader is started externally by UnifiedSerialBuilder
         
         log::info!("Connected to JoyCore device on {}", device_info.port_name);
         Ok(())
@@ -118,6 +132,9 @@ impl SerialInterface {
         if let Some(device) = &self.device_info {
             log::info!("Disconnecting from {}", device.port_name);
         }
+        
+    // Unified reader owned externally; no channel cleanup needed
+        
         self.port = None;
         self.device_info = None;
     }
@@ -189,13 +206,13 @@ impl SerialInterface {
             .map_err(|_| SerialError::Timeout)?
     }
 
-    /// Send a command and wait for response
+    /// Send a command and wait for response with message routing
     pub async fn send_command(&mut self, command: &str) -> Result<String> {
         log::debug!("Sending command: {}", command);
         let command_with_newline = format!("{}\n", command);
         self.send_data(command_with_newline.as_bytes()).await?;
 
-        // Use larger buffer and line-by-line reading similar to Python implementation
+    // Use larger buffer and line-by-line reading
         let mut response_lines = Vec::new();
         let mut accumulated_data = Vec::new();
         let start_time = std::time::Instant::now();
@@ -212,13 +229,16 @@ impl SerialInterface {
                     if bytes_read > 0 {
                         accumulated_data.extend_from_slice(&buffer[..bytes_read]);
                         
-                        // Process complete lines
+                        // Process complete lines with routing
                         while let Some(line_end) = accumulated_data.iter().position(|&b| b == b'\n' || b == b'\r') {
                             let line_bytes = accumulated_data.drain(..=line_end).collect::<Vec<u8>>();
                             let line = String::from_utf8_lossy(&line_bytes).trim().to_string();
                             
                             if !line.is_empty() {
                                 log::debug!("Received line: {}", line);
+                                
+                                // (legacy routing removed)
+                                // Always add to response for command processing
                                 response_lines.push(line.clone());
                                 
                                 // Check for termination conditions like Python script
@@ -249,6 +269,7 @@ impl SerialInterface {
         if !accumulated_data.is_empty() {
             let line = String::from_utf8_lossy(&accumulated_data).trim().to_string();
             if !line.is_empty() {
+                // (legacy routing removed)
                 response_lines.push(line);
             }
         }
@@ -257,6 +278,20 @@ impl SerialInterface {
         log::debug!("Complete response ({} lines): {}", response_lines.len(), full_response);
         Ok(full_response)
     }
+
+    /// Read a line from the device with timeout (for streaming)
+    pub async fn read_line_timeout(&mut self, timeout_ms: u64) -> Result<String> {
+        let mut buffer = [0u8; 1024];
+        let bytes_read = self.read_data(&mut buffer, timeout_ms).await?;
+        
+        if bytes_read > 0 {
+            Ok(String::from_utf8_lossy(&buffer[..bytes_read]).to_string())
+        } else {
+            Ok(String::new())
+        }
+    }
+
+    // Legacy monitoring & routing helpers removed (handled entirely by unified reader)
 
     /// Identify a device on the given port using IDENTIFY command
     /// Returns Ok(Some(device_info)) if it's a JoyCore device
@@ -356,6 +391,7 @@ impl SerialInterface {
         
         None
     }
+
 }
 
 impl Default for SerialInterface {

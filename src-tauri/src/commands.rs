@@ -1,3 +1,4 @@
+// (Removed stray spec initialization inserted by patch error)
 use std::sync::Arc;
 use std::path::PathBuf;
 use tauri::{State, Emitter};
@@ -10,6 +11,7 @@ use crate::serial::StorageInfo;
 use crate::hid::ButtonStates;
 use crate::update::{UpdateService, VersionCheckResult};
 use crate::config::binary::{BinaryConfig, UIAxisConfig, UIButtonConfig};
+use crate::serial::unified::types::{CommandSpec, ResponseMatcher, SerialCommand};
 
 /// Discover available JoyCore devices
 #[tauri::command]
@@ -605,4 +607,107 @@ pub async fn hid_button_bit_diagnostics(
 ) -> Result<Option<serde_json::Value>, String> {
     // There is no direct existing method; access via hid reader through mapping details path
     Ok(device_manager.hid_button_bit_diagnostics().await)
+}
+
+// Raw hardware state commands
+
+/// Get the current raw state display mode
+#[tauri::command]
+pub async fn get_raw_state_display_mode() -> Result<String, String> {
+    Ok(crate::raw_state::get_display_mode_string())
+}
+
+/// Read current GPIO states from connected device
+#[tauri::command]
+pub async fn read_raw_gpio_states(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<crate::raw_state::RawGpioStates, String> {
+    device_manager.read_raw_gpio_states().await
+        .map_err(|e| format!("Failed to read GPIO states: {}", e))
+}
+
+/// Read current matrix states from connected device
+#[tauri::command]
+pub async fn read_raw_matrix_state(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<crate::raw_state::MatrixState, String> {
+    device_manager.read_raw_matrix_state().await
+        .map_err(|e| format!("Failed to read matrix states: {}", e))
+}
+
+/// Read current shift register states from connected device
+#[tauri::command]
+pub async fn read_raw_shift_reg_state(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Vec<crate::raw_state::ShiftRegisterState>, String> {
+    device_manager.read_raw_shift_reg_state().await
+        .map_err(|e| format!("Failed to read shift register states: {}", e))
+}
+
+/// Read all raw hardware states from connected device
+#[tauri::command]
+pub async fn read_all_raw_states(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<crate::raw_state::RawHardwareState, String> {
+    device_manager.read_all_raw_states().await
+        .map_err(|e| format!("Failed to read all raw states: {}", e))
+}
+
+/// Start raw state monitoring for connected device
+#[tauri::command]
+pub async fn start_raw_state_monitoring(
+    device_manager: State<'_, Arc<DeviceManager>>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    device_manager.start_raw_state_monitoring(app_handle).await
+        .map_err(|e| format!("Failed to start monitoring: {}", e))
+}
+
+/// Stop raw state monitoring for connected device
+#[tauri::command]
+pub async fn stop_raw_state_monitoring(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<(), String> {
+    device_manager.stop_raw_state_monitoring().await
+        .map_err(|e| format!("Failed to stop monitoring: {}", e))
+}
+
+// Unified serial
+#[tauri::command]
+pub async fn unified_get_snapshot(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<crate::serial::unified::types::RawStateSnapshot>, String> {
+    if let Some(handle) = device_manager.get_unified_serial_handle().await {
+        let snap = handle.snapshot_receiver().borrow().clone();
+        return Ok(Some((*snap).clone()));
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+pub async fn unified_get_metrics(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<crate::serial::unified::types::MetricsSnapshot>, String> {
+    if let Some(handle) = device_manager.get_unified_serial_handle().await {
+        let m = handle.metrics_receiver().borrow().clone();
+        return Ok(Some(m));
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+pub async fn unified_status(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<Vec<String>>, String> {
+    if let Some(handle) = device_manager.get_unified_serial_handle().await {
+    let spec = CommandSpec { name: "STATUS", matcher: ResponseMatcher::UntilPrefix("OK"), timeout: std::time::Duration::from_millis(500), test_min_duration_ms: None };
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        handle.cmd_tx.send(SerialCommand::Write { cmd: "STATUS".to_string(), spec, responder: tx }).await.map_err(|e| format!("Send failed: {}", e))?;
+        match rx.await {
+            Ok(Ok(resp)) => return Ok(Some(resp.lines)),
+            Ok(Err(e)) => return Err(format!("STATUS error: {}", e)),
+            Err(e) => return Err(format!("Channel error: {}", e)),
+        }
+    }
+    Ok(None)
 }
