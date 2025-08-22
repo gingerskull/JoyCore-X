@@ -49,6 +49,28 @@ Key Types (Rust backend):
 
 All prior feature flags (e.g. `unified-serial`) were removed; the unified path is always active.
 
+## Event-Driven Device Management (New)
+
+Previously the UI performed interval polling plus an explicit cleanup pass that could race with transient enumeration glitches and cause flicker or false disconnects. This has been replaced with a push/event model:
+
+- The backend assigns stable logical IDs to devices (key = `port_name:serial_number`) and emits:
+	- `device_list_updated` with the full authoritative list whenever discovery or a state mutation occurs.
+	- `device_connection_changed` with `{ id, state }` on connection lifecycle transitions.
+- Frontend `useDevice` hook subscribes to these events and no longer polls; interval refresh logic was removed.
+- Manual user “Refresh” now calls a lightweight `force_discover_devices` command (alias to discovery) which itself triggers the same events; no special cleanup path exists.
+- Legacy `cleanup_disconnected_devices` function and command were removed entirely to avoid aggressive misclassification; disappearance is resolved naturally by the next discovery emission.
+
+Benefits:
+1. Eliminates race conditions between overlapping poll cycles.
+2. Prevents UUID churn (stable IDs) eliminating UI re‑mount flicker.
+3. Reduces serial contention (fewer IDENTIFY/status bursts) improving connect reliability.
+4. Simplifies mental model: UI treats backend as single source of truth fed via events.
+
+Minimal Compatibility Layer:
+- Deprecated `refreshDevices` / `refreshDevicesSilently` methods remain as no‑ops temporarily for components pending cleanup; they can be safely removed once no references exist.
+
+See `src/hooks/useDevice.ts` for the event subscription logic and `src-tauri/src/device/manager.rs` for emission points.
+
 ## Development Setup
 
 ```bash

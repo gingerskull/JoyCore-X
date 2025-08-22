@@ -32,16 +32,32 @@ pub async fn get_devices(
     Ok(device_manager.get_devices().await)
 }
 
-/// Clean up devices that are no longer present
+// Legacy cleanup_disconnected_devices command removed: discovery events are authoritative
+
+/// Explicit force discover command (alias to discover for clarity in new event model)
 #[tauri::command]
-pub async fn cleanup_disconnected_devices(
+pub async fn force_discover_devices(
     device_manager: State<'_, Arc<DeviceManager>>,
-) -> Result<Vec<String>, String> {
-    device_manager
-        .cleanup_disconnected_devices()
-        .await
-        .map(|uuids| uuids.into_iter().map(|uuid| uuid.to_string()).collect())
-        .map_err(|e| format!("Failed to cleanup disconnected devices: {}", e))
+) -> Result<Vec<Device>, String> {
+    // Perform a short burst of discovery attempts to catch freshly attached devices that
+    // appear a fraction of a second after user action (no continuous polling reintroduced).
+    let baseline = device_manager.get_devices().await;
+    let mut attempts = 0;
+    let mut last = baseline.clone();
+    while attempts < 3 {
+        attempts += 1;
+        match device_manager.discover_devices().await {
+            Ok(list) => {
+                // If device count changed or any new port appears, break early
+                let changed = list.len() != baseline.len() || list.iter().any(|d| !baseline.iter().any(|b| b.id == d.id));
+                last = list;
+                if changed { break; }
+            }
+            Err(e) => return Err(format!("Failed to force discover devices: {}", e)),
+        }
+        if attempts < 3 { tokio::time::sleep(std::time::Duration::from_millis(180)).await; }
+    }
+    Ok(last)
 }
 
 /// Connect to a specific device

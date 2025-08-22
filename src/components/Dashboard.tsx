@@ -13,7 +13,7 @@ import { ConfigurationTabs } from './ConfigurationTabs';
 import { FirmwareUpdateDialog } from './FirmwareUpdateDialog';
 import { FirmwareUpdateNotification } from './FirmwareUpdateNotification';
 import { TitleBar } from './TitleBar';
-import { useFirmwareUpdates } from '@/hooks/useFirmwareUpdates';
+import { useFirmwareUpdatesContext } from '@/contexts/FirmwareUpdatesProvider';
 import type { DeviceStatus, ParsedAxisConfig, ParsedButtonConfig, PinFunction } from '@/lib/types';
 
 interface DevicePinAssignments {
@@ -28,8 +28,6 @@ export function Dashboard() {
     isLoading,
     error,
     discoverDevices,
-    refreshDevices,
-    refreshDevicesSilently,
     isConnected,
     hasError,
     clearError,
@@ -53,16 +51,7 @@ export function Dashboard() {
   const [notificationDismissed, setNotificationDismissed] = useState(false);
 
   // Get current firmware version from connected device
-  const currentFirmwareVersion = connectedDevice?.device_status?.firmware_version;
-
-  // Use firmware update hook
-  const {
-    hasUpdateAvailable,
-    latestVersion,
-  } = useFirmwareUpdates({
-    currentVersion: currentFirmwareVersion,
-    autoCheck: true,
-  });
+  const { hasUpdateAvailable, latestVersion, currentVersion: currentFirmwareVersion } = useFirmwareUpdatesContext();
 
   // Auto-discover devices on mount
   useEffect(() => {
@@ -104,17 +93,7 @@ export function Dashboard() {
     }
   }, [isConnected, clearConfigError]);
 
-  // Refresh devices periodically (silent background refresh)
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      // Always use cleanup to detect physical disconnections for all device states
-      // Use silent refresh to avoid loading UI flicker
-      await refreshDevicesSilently(true);
-      setLastRefresh(new Date());
-    }, isConnected ? 3000 : 2000); // 3s when connected, 2s when disconnected for faster updates
-
-    return () => clearInterval(interval);
-  }, [refreshDevicesSilently, isConnected]);
+  // Removed polling: device list updates now driven by backend events
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed(!sidebarCollapsed);
@@ -146,7 +125,8 @@ export function Dashboard() {
     clearError();
     // For manual refresh, only use cleanup if we're not connected
     // This prevents falsely disconnecting active connections
-    await refreshDevices(!isConnected); 
+  // In event-driven model, manual refresh triggers a force discover
+  await discoverDevices();
     setLastRefresh(new Date());
   };
 

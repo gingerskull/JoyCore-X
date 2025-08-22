@@ -4,7 +4,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,6 +14,7 @@ import { useDeviceContext } from '@/contexts/DeviceContext';
 
 // Raw state components
 import { useRawPinState } from '@/hooks/useRawPinState';
+import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
 import { GpioPinBadge, MatrixConnectionBadge, ShiftRegBitBadge } from '@/components/RawStateBadge';
 import { RAW_STATE_CONFIG } from '@/lib/dev-config';
 
@@ -46,6 +46,12 @@ interface ButtonEvent {
   button_id: number;
   pressed: boolean;
   timestamp: string;
+}
+
+// Utility: extract physical mapping segment from a button name e.g. "(Pin 12)" or "(Matrix[1,2])" etc.
+function extractPhysicalSegment(name: string): string | null {
+  const match = name.match(/\(.*\)/);
+  return match ? match[0] : null;
 }
 
 // (Mapping details interface removed after optimization; reintroduce if advanced mapping UI needed.)
@@ -94,6 +100,31 @@ function parseButtonName(name: string): ParsedButtonInfo {
 
 export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedButtons = [], isLoading = false }: ButtonConfigurationProps) {
   const [buttonStates, setButtonStates] = useState<Record<number, { enabled: boolean; function: string }>>({});
+  // Local editable copy of buttons for add/delete operations
+  const [editableButtons, setEditableButtons] = useState<ParsedButtonConfig[]>(parsedButtons);
+
+  // Sync editable buttons when parsedButtons changes (e.g., device reload) unless user has local edits
+  useEffect(() => {
+    setEditableButtons(prev => {
+      // If lengths differ by large margin or prev empty, replace; simple heuristic
+      if (prev.length === 0 || Math.abs(prev.length - parsedButtons.length) > 0) {
+        return parsedButtons;
+      }
+      return prev; // keep local edits
+    });
+  }, [parsedButtons]);
+
+  // Freeze initial firmware buttons snapshot for raw mapping display
+  const firmwareButtonsRef = useRef<ParsedButtonConfig[] | null>(null);
+  if (firmwareButtonsRef.current === null && parsedButtons.length > 0) {
+    firmwareButtonsRef.current = parsedButtons;
+  }
+  // If device reloads (different length and snapshot empty), refresh snapshot
+  useEffect(() => {
+    if (!firmwareButtonsRef.current && parsedButtons.length > 0) {
+      firmwareButtonsRef.current = parsedButtons;
+    }
+  }, [parsedButtons]);
   const [hidButtonStates, setHidButtonStates] = useState<ButtonStates | null>(null); // retains last full payload (timestamp)
   const [buttonMask, setButtonMask] = useState<number>(0); // UI-rendered bitmask (throttled)
   const latestMaskRef = useRef<number>(0); // immediate latest from poller
@@ -115,6 +146,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
 
   // Raw hardware state hook
   const rawState = useRawPinState();
+  const { gpioPullMode, shiftRegPullMode } = useRawStateConfig();
   
   // Debug raw state (disabled to reduce console noise)
   useEffect(() => {
@@ -151,6 +183,62 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
       enabled: button.enabled,
       function: button.function
     };
+  };
+
+  const handleAddButton = () => {
+    setEditableButtons(prev => {
+      const maxId = prev.reduce((m,b) => Math.max(m,b.id), -1);
+      const newId = maxId + 1;
+      const newBtn: ParsedButtonConfig = {
+        id: newId,
+        name: `Button ${newId} (Unassigned)`,
+        function: 'normal',
+        enabled: true
+      };
+      return [...prev, newBtn];
+    });
+    setButtonStates(prev => {
+      const maxId = Object.keys(prev).map(k=>parseInt(k)).reduce((m,b)=> Math.max(m,b), -1);
+      const newId = Math.max(maxId, editableButtons.reduce((m,b)=> Math.max(m,b.id), -1)) + 1; // ensure sync
+      return { ...prev, [newId]: { enabled: true, function: 'normal' } };
+    });
+  };
+
+  const handleDeleteButton = (id: number) => {
+    // Keep original parsedButtons (left visualization) intact; only remove from editable list
+    setEditableButtons(prev => prev.filter(b => b.id !== id));
+    setButtonStates(prev => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+  };
+
+  const handleIdChange = (oldId: number, newId: number) => {
+    if (Number.isNaN(newId) || newId < 0) return;
+    setEditableButtons(prev => prev.map(b => {
+      if (b.id === oldId) {
+        // Preserve physical segment in name (text inside parentheses)
+        const phys = b.name.match(/\(.*\)/)?.[0] || '';
+        return { ...b, id: newId, name: `Button ${newId} ${phys}`.trim() };
+      }
+      return b;
+    }));
+    setButtonStates(prev => {
+      const copy = { ...prev };
+      if (copy[oldId]) {
+        copy[newId] = copy[oldId];
+        delete copy[oldId];
+      }
+      return copy;
+    });
+  };
+
+  // Build physical mapping options from current raw state and parsedButtons
+  interface PhysOption { value: string; label: string; }
+
+  const handlePhysicalChange = (button: ParsedButtonConfig, physValue: string) => {
+    setEditableButtons(prev => prev.map(b => b === button ? { ...b, name: `Button ${b.id} ${physValue}` } : b));
   };
 
   // Fetch HID mapping once per connection
@@ -285,7 +373,8 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
     if (buttonMask === 0) return set;
     
     // Use proper bit manipulation for up to 53 bits
-    const maxId = Math.max(-1, ...parsedButtons.map(b => b.id));
+  const source = firmwareButtonsRef.current || parsedButtons;
+  const maxId = Math.max(-1, ...source.map(b => b.id));
     for (let bit = 0; bit <= maxId && bit < 53; bit++) {
       // Use Math.pow for bits > 31 to avoid JS bitwise operator limitations
       const bitValue = bit < 32 ? (1 << bit) : Math.pow(2, bit);
@@ -325,8 +414,8 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
       matrix: [] as Array<{ button: ParsedButtonConfig; info: ParsedButtonInfo }>,
       shiftreg: [] as Array<{ button: ParsedButtonConfig; info: ParsedButtonInfo }>
     };
-
-    parsedButtons.forEach(button => {
+    const source = firmwareButtonsRef.current || parsedButtons;
+    source.forEach(button => {
       const info = parseButtonName(button.name);
       groups[info.type].push({ button, info });
     });
@@ -344,6 +433,16 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
 
     return groups;
   }, [parsedButtons]);
+
+  const physicalOptions: PhysOption[] = useMemo(() => {
+    const opts: PhysOption[] = [];
+    const unique = new Set<string>();
+    const push = (value: string, label: string) => { if (!unique.has(value)) { unique.add(value); opts.push({ value, label }); } };
+    groupedButtons.direct.forEach(({ info }) => { if (info.index !== undefined) push(`(Pin ${info.index})`, `Pin ${info.index}`); });
+    groupedButtons.matrix.forEach(({ info }) => { if (info.row !== undefined && info.col !== undefined) push(`(Matrix[${info.row},${info.col}])`, `Matrix[${info.row},${info.col}]`); });
+    groupedButtons.shiftreg.forEach(({ info }) => { if (info.register !== undefined && info.bit !== undefined) push(`(ShiftReg[${info.register}].bit${info.bit})`, `ShiftReg[${info.register}].bit${info.bit}`); });
+    return opts.sort((a,b)=> a.label.localeCompare(b.label));
+  }, [groupedButtons]);
 
   // Calculate matrix dimensions
   const matrixDimensions = useMemo(() => {
@@ -367,6 +466,34 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
       return hasLogicalButton ? 'configured' : 'unconfigured';
     }
   };
+
+  // Determine if a physical input (parsed mapping) is presently active in RAW mode.
+  const isPhysicalActive = useCallback((info: ParsedButtonInfo): boolean => {
+    if (rawState.displayMode !== 'raw') return false;
+    // Direct GPIO: determine physical level then apply pull mode interpretation
+    if (info.type === 'direct' && info.index !== undefined && rawState.gpioStates !== null) {
+      const bitMask = 1 << info.index;
+      const physicalHigh = (rawState.gpioStates & bitMask) !== 0; // voltage level
+      const logicalActive = gpioPullMode === 'pull-up' ? !physicalHigh : physicalHigh;
+      return logicalActive;
+    }
+    // Matrix remains unchanged (connection closed = active)
+    if (info.type === 'matrix' && rawState.matrixStates) {
+      const conn = rawState.matrixStates.connections.find(c => c.row === info.row && c.col === info.col);
+      return !!conn?.is_connected;
+    }
+    // Shift register: physical bit then interpreted by pull mode
+    if (info.type === 'shiftreg' && info.register !== undefined && info.bit !== undefined) {
+      const reg = rawState.shiftRegStates.find(r => r.register_id === info.register);
+      if (reg) {
+        const bitMask = 1 << info.bit;
+        const physicalHigh = (reg.value & bitMask) !== 0; // bit=1 means HIGH
+        const logicalActive = shiftRegPullMode === 'pull-up' ? !physicalHigh : physicalHigh;
+        return logicalActive;
+      }
+    }
+    return false;
+  }, [rawState, gpioPullMode, shiftRegPullMode]);
 
   if (!deviceStatus || !isConnected) {
     return (
@@ -671,18 +798,30 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[40px]">On</TableHead>
-                    <TableHead>Physical Button</TableHead>
                     <TableHead className="w-[50px]">ID</TableHead>
+                    <TableHead>Physical Button</TableHead>
                     <TableHead className="w-[120px]">Function</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                {parsedButtons.map((button) => {
+                {editableButtons.map((button, idx) => {
                   const state = getButtonState(button);
+                  // Parse physical mapping each render for editable list (may differ from firmware snapshot)
+                  const physSegment = extractPhysicalSegment(button.name);
+                  const parsedInfo = physSegment ? parseButtonName(`Button ${button.id} ${physSegment}`) : null;
+                  // Active criteria:
+                  //  - In HID mode: logical button currently pressed
+                  //  - In RAW mode: associated physical resource is active (heuristic per type)
+                  const logicalPressed = rawState.displayMode === 'hid' && isButtonPressed(button.id);
+                  const physicalActive = rawState.displayMode === 'raw' && parsedInfo ? isPhysicalActive(parsedInfo) : false;
+                  const highlight = (logicalPressed || physicalActive) && !!physSegment; // only highlight if mapping exists
                   return (
                     <TableRow 
-                      key={button.id} 
-                      className={!state.enabled ? 'opacity-50' : ''}
+                      key={`row-${idx}-${button.id}`} 
+                      className={['',
+                        !state.enabled ? 'opacity-50' : '',
+                        highlight ? 'bg-green-500/50' : ''
+                      ].filter(Boolean).join('')}
                     >
                       <TableCell className="p-2">
                         <Checkbox
@@ -692,26 +831,39 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                           className="h-4 w-4 rounded"
                         />
                       </TableCell>
-                      <TableCell className="p-2">
-                        {(() => {
-                          // button.name parsing already cached via grouping, retrieve matching info
-                          const info = groupedButtons.direct.find(d => d.button === button)?.info ||
-                                       groupedButtons.shiftreg.find(s => s.button === button)?.info ||
-                                       groupedButtons.matrix.find(m => m.button === button)?.info ||
-                                       parseButtonName(button.name);
-                          const variantMap = { direct: 'blue', shiftreg: 'teal', matrix: 'purple' } as const;
-                          const variant = variantMap[info.type] || 'blue';
-                          return (
-                            <Badge variant={variant as 'blue' | 'teal' | 'purple'} className="font-mono text-xs">
-                              {info.label}
-                            </Badge>
-                          );
-                        })()}
+                      <TableCell className="p-2 flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={button.id}
+                          onChange={(e) => handleIdChange(button.id, parseInt(e.target.value,10))}
+                          className="w-14 border rounded px-1 py-0.5 text-xs font-mono bg-background"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteButton(button.id)}
+                          className="text-xs text-red-500 hover:text-red-600"
+                          aria-label={`Delete button ${button.id}`}
+                        >
+                          ✕
+                        </button>
                       </TableCell>
                       <TableCell className="p-2">
-                        <Badge variant="secondary" className="font-mono">
-                          {button.id}
-                        </Badge>
+                        <Select
+                          value={button.name.match(/\(.*\)/)?.[0] || ''}
+                          onValueChange={(v) => handlePhysicalChange(button, v)}
+                          disabled={!isConnected}
+                        >
+                          <SelectTrigger size="xs" className="w-[180px]">
+                            <SelectValue placeholder="Select mapping" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {physicalOptions.map(opt => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                <span className="text-xs font-mono">{opt.label}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell className="p-2">
                         <Select
@@ -751,6 +903,15 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                 })}
                 </TableBody>
               </Table>
+              <div className="p-2">
+                <button
+                  type="button"
+                  onClick={handleAddButton}
+                  className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90"
+                >
+                  Add Button
+                </button>
+              </div>
             </ScrollArea>
           </div>
         </div>

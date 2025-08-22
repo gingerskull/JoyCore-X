@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import type { Device, DeviceStatus, ConnectionInfo } from '@/lib/types';
 
 export function useDevice() {
   const [devices, setDevices] = useState<Device[]>([]);
+  const devicesRef = useRef<Device[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
+  const connectedRef = useRef<Device | null>(null);
   const [connectionInfo, setConnectionInfo] = useState<ConnectionInfo>({
     status: 'disconnected'
   });
@@ -47,168 +50,59 @@ export function useDevice() {
     });
   }, []);
 
-  // Discover available devices
+  // Explicit discover action (force backend discovery); normally events keep us updated
   const discoverDevices = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    
     try {
-      const discoveredDevices: Device[] = await invoke('discover_devices');
-      setDevices(discoveredDevices);
-      return discoveredDevices;
+      setIsLoading(true);
+      const discovered: Device[] = await invoke('force_discover_devices');
+      // Response already emitted events; still update local immediately
+  devicesRef.current = discovered;
+  setDevices(discovered);
+      return discovered;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to discover devices';
-      setError(errorMessage);
+      const msg = err instanceof Error ? err.message : 'Failed to discover devices';
+      setError(msg);
       return [];
-    } finally {
-      setIsLoading(false);
-    }
+    } finally { setIsLoading(false); }
   }, []);
 
-  // Get all known devices with optional cleanup
-  const refreshDevices = useCallback(async (withCleanup = false) => {
-    setIsLoading(true);
-    try {
-      if (withCleanup) {
-        // Run cleanup to remove physically disconnected devices
-        await invoke('cleanup_disconnected_devices');
-        // Then discover to add any new devices
-        await invoke('discover_devices');
-      } else {
-        // Just refresh discovery without aggressive cleanup
-        await invoke('discover_devices');
-      }
-      
-      // Get the updated device list
-      const allDevices: Device[] = await invoke('get_devices');
-      setDevices(allDevices);
-      
-      // Check if connected device is still actually connected
-      if (connectedDevice) {
-        const stillConnected = allDevices.find(d => 
-          d.id === connectedDevice.id && d.connection_state === 'Connected'
-        );
-        if (!stillConnected) {
-          // Device was physically disconnected
-          console.log('Connected device was physically disconnected, updating state');
-          setConnectedDevice(null);
-          setConnectionInfo({ status: 'disconnected' });
-        }
-      }
-      
-      return allDevices;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh devices';
-      setError(errorMessage);
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  }, [connectedDevice]);
-
-  // Silent refresh for background polling (no loading UI changes)
-  const refreshDevicesSilently = useCallback(async (withCleanup = false) => {
-    try {
-      if (withCleanup) {
-        // Run cleanup to remove physically disconnected devices
-        await invoke('cleanup_disconnected_devices');
-        // Then discover to add any new devices
-        await invoke('discover_devices');
-      } else {
-        // Just refresh discovery without aggressive cleanup
-        await invoke('discover_devices');
-      }
-      
-      // Get the updated device list
-      const allDevices: Device[] = await invoke('get_devices');
-      
-      // Only update state if devices actually changed
-      if (!devicesEqual(devices, allDevices)) {
-        setDevices(allDevices);
-      }
-      
-      // Check if connected device is still actually connected
-      if (connectedDevice) {
-        const stillConnected = allDevices.find(d => 
-          d.id === connectedDevice.id && d.connection_state === 'Connected'
-        );
-        if (!stillConnected) {
-          // Device was physically disconnected
-          console.log('Connected device was physically disconnected, updating state');
-          setConnectedDevice(null);
-          setConnectionInfo({ status: 'disconnected' });
-        }
-      }
-      
-      return allDevices;
-    } catch (err) {
-      // Silent errors - log but don't show in UI
-      console.error('Silent device refresh failed:', err);
-      return devices; // Return current devices on error
-    }
-  }, [connectedDevice, devices, devicesEqual]);
+  // Deprecated legacy refresh API removed; provide no-op placeholders for compatibility until components updated
+  const refreshDevices = useCallback(async () => devices, [devices]);
+  const refreshDevicesSilently = useCallback(async () => devices, [devices]);
 
   // Connect to a device
   const connectDevice = useCallback(async (deviceId: string) => {
-    setIsLoading(true);
-    setError(null);
-    
     try {
-      console.log('Attempting to connect to device:', deviceId);
+      setIsLoading(true);
+      setError(null);
       await invoke('connect_device', { deviceId });
-      
-      // Update connection info
-      const device = devices.find(d => d.id === deviceId);
+      // Immediate optimistic state
+      const device = devicesRef.current.find(d => d.id === deviceId);
       if (device) {
-        const updatedDevice = { ...device, connection_state: 'Connecting' as const };
-        setConnectionInfo(parseConnectionState(updatedDevice));
+        setConnectionInfo({ status: 'connecting', device });
       }
-      
-      // Refresh devices to get updated connection state
-      await refreshDevices();
-      
-      // Get connected device info
-      const connected: Device | null = await invoke('get_connected_device');
-      if (connected) {
-        setConnectedDevice(connected);
-        const connectionState = parseConnectionState(connected);
-        setConnectionInfo(connectionState);
-      }
-      
       return true;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to connect to device';
-      console.error('Connection error:', err);
-      setError(errorMessage);
-      setConnectionInfo({ status: 'error', error: errorMessage });
+      const msg = err instanceof Error ? err.message : 'Failed to connect to device';
+      setError(msg);
+      setConnectionInfo({ status: 'error', error: msg });
       return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [devices, refreshDevices]);
+    } finally { setIsLoading(false); }
+  }, []);
 
   // Disconnect from current device
   const disconnectDevice = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    
     try {
+      setIsLoading(true);
+      setError(null);
       await invoke('disconnect_device');
-      setConnectedDevice(null);
-      setConnectionInfo({ status: 'disconnected' });
-      
-      // Refresh devices to get updated connection state
-      await refreshDevices();
-      
       return true;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to disconnect device';
-      setError(errorMessage);
+      const msg = err instanceof Error ? err.message : 'Failed to disconnect device';
+      setError(msg);
       return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [refreshDevices]);
+    } finally { setIsLoading(false); }
+  }, []);
 
   // Get device status
   const getDeviceStatus = useCallback(async (): Promise<DeviceStatus | null> => {
@@ -222,34 +116,128 @@ export function useDevice() {
     }
   }, []);
 
-  // Initialize - check for connected device and get devices (run only once on mount)
+  // Initialize & subscribe to backend events
   useEffect(() => {
-    const initialize = async () => {
-      setIsLoading(true);
-      
+  const unlistenList: Array<() => void> = [];
+    const setup = async () => {
       try {
-        // Check if there's already a connected device
-        const connected: Device | null = await invoke('get_connected_device');
+        setIsLoading(true);
+        // Initial snapshot
+        const [connected, list] = await Promise.all([
+          invoke<Device | null>('get_connected_device'),
+          invoke<Device[]>('get_devices')
+        ]);
         if (connected) {
+          connectedRef.current = connected;
           setConnectedDevice(connected);
           setConnectionInfo(parseConnectionState(connected));
         }
-        
-        // Get all devices
-        const allDevices: Device[] = await invoke('get_devices');
-        setDevices(allDevices);
-      } catch (err) {
-        console.error('Failed to initialize device hook:', err);
-        setError('Failed to initialize device connection');
-      } finally {
-        setIsLoading(false);
-      }
+        devicesRef.current = list;
+        setDevices(list);
+        // Event: device list updates
+        const un1 = await listen<Device[]>('device_list_updated', (e) => {
+          const updated = e.payload || [];
+          setDevices(prev => {
+            // Always compare with previous snapshot to avoid stale outer closure
+            if (devicesEqual(prev, updated)) return prev;
+            devicesRef.current = updated;
+            // Sync connected device reference if present
+            if (connectedRef.current) {
+              const match = updated.find(d => d.id === connectedRef.current!.id);
+              if (match) {
+                connectedRef.current = match;
+                setConnectedDevice(match);
+              } else {
+                connectedRef.current = null;
+                setConnectedDevice(null);
+                setConnectionInfo(ci => ci.status === 'connected' ? { status: 'disconnected' } : ci);
+              }
+            }
+            // Fallback adoption
+            if (!connectedRef.current) {
+              const firstConnected = updated.find(d => d.connection_state === 'Connected');
+              if (firstConnected) {
+                connectedRef.current = firstConnected;
+                setConnectedDevice(firstConnected);
+                setConnectionInfo({ status: 'connected', device: firstConnected });
+              }
+            }
+            return updated;
+          });
+        });
+        unlistenList.push(un1);
+        // Event: connection state changes
+        interface ConnEvt { id: string; state: string; error?: string }
+  const un2 = await listen<ConnEvt>('device_connection_changed', (e) => {
+          const payload = e.payload as ConnEvt | undefined;
+          const id = payload?.id ?? '';
+          const state = payload?.state ?? '';
+          if (!id) return;
+          setDevices(prev => {
+            const updated = prev.map(d => d.id === id ? { ...d, connection_state: state as Device['connection_state'] } : d);
+            devicesRef.current = updated;
+            return updated;
+          });
+          const dev = devicesRef.current.find(d => d.id === id);
+          if (state === 'Connected' && dev) {
+            connectedRef.current = { ...dev, connection_state: 'Connected' as const };
+            setConnectedDevice(connectedRef.current);
+            setConnectionInfo({ status: 'connected', device: connectedRef.current });
+            // Kick off immediate status fetch to populate device_status for UI gating
+            (async () => {
+              try {
+                const status = await invoke<DeviceStatus | null>('get_device_status');
+                if (status) {
+                  setDevices(prev => {
+                    const upd = prev.map(d => d.id === id ? { ...d, device_status: status } : d);
+                    devicesRef.current = upd;
+                    // Update connectedRef snapshot as well
+                    if (connectedRef.current && connectedRef.current.id === id) {
+                      connectedRef.current = { ...connectedRef.current, device_status: status } as Device;
+                      setConnectedDevice(connectedRef.current);
+                    }
+                    return upd;
+                  });
+                }
+              } catch (err) {
+                console.warn('Immediate status fetch failed:', err);
+              }
+            })();
+          } else if (state === 'Disconnected') {
+            if (connectedRef.current && connectedRef.current.id === id) {
+              connectedRef.current = null;
+              setConnectedDevice(null);
+              setConnectionInfo({ status: 'disconnected' });
+            }
+          } else if (state === 'Connecting' && dev) {
+            connectedRef.current = dev;
+            setConnectedDevice(dev);
+            setConnectionInfo({ status: 'connecting', device: dev });
+          } else if (state === 'Error') {
+            if (connectedRef.current && connectedRef.current.id === id) {
+              setConnectionInfo({ status: 'error', device: connectedRef.current, error: payload?.error });
+            } else if (dev) {
+              setConnectionInfo({ status: 'error', device: dev, error: payload?.error });
+            } else {
+              setConnectionInfo({ status: 'error', error: payload?.error });
+            }
+          }
+        });
+        unlistenList.push(un2);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Initialization failed';
+        setError(msg);
+      } finally { setIsLoading(false); }
     };
+    setup();
+    return () => { unlistenList.forEach(u => { try { u(); } catch { /* ignore */ } }); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    initialize();
-  }, []); // Empty dependency array - only run once on mount
+  // Derive connectivity primarily from connectedDevice's connection_state (more authoritative than transient connectionInfo)
+  const isConnected = connectedDevice?.connection_state === 'Connected' || connectionInfo.status === 'connected';
 
-  const isConnected = connectionInfo.status === 'connected';
+  // (Diagnostics removed) 
 
   return {
     // State
@@ -260,9 +248,9 @@ export function useDevice() {
     error,
     
     // Actions
-    discoverDevices,
-    refreshDevices,
-    refreshDevicesSilently,
+  discoverDevices,
+  refreshDevices, // deprecated no-op
+  refreshDevicesSilently, // deprecated no-op
     connectDevice,
     disconnectDevice,
     getDeviceStatus,

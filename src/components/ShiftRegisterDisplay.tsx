@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { type ShiftRegisterState, RAW_STATE_CONFIG } from '@/lib/dev-config';
+import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
 
 interface ShiftRegisterDisplayProps {
   registerState: ShiftRegisterState;
@@ -16,6 +17,7 @@ export function ShiftRegisterDisplay({
   labels = [], 
   className 
 }: ShiftRegisterDisplayProps) {
+  const { shiftRegPullMode } = useRawStateConfig();
   return (
     <div className={cn("shift-register-display p-3 bg-gray-50 rounded-lg border", className)}>
       <div className="flex items-center justify-between mb-2">
@@ -31,7 +33,8 @@ export function ShiftRegisterDisplay({
       <div className="flex gap-1 justify-center">
         {Array.from({ length: 8 }, (_, i) => {
           const bitIndex = 7 - i; // Display from bit 7 to bit 0
-          const bitValue = (registerState.value >> bitIndex) & 1;
+          const physicalBit = (registerState.value >> bitIndex) & 1; // 1=HIGH
+          const logicalActive = shiftRegPullMode === 'pull-up' ? physicalBit === 0 : physicalBit === 1;
           const label = labels[bitIndex];
           
           return (
@@ -41,13 +44,13 @@ export function ShiftRegisterDisplay({
                 "flex flex-col items-center justify-center",
                 "w-10 h-12 rounded text-xs font-medium transition-all",
                 "border shadow-sm",
-                bitValue 
+                logicalActive 
                   ? "bg-blue-500 text-white border-blue-600" 
                   : "bg-white text-gray-600 border-gray-300"
               )}
-              title={`Bit ${bitIndex}: ${bitValue ? 'HIGH' : 'LOW'}${label ? ` (${label})` : ''}`}
+              title={`Bit ${bitIndex}: Physical ${physicalBit ? 'HIGH' : 'LOW'} | Logical ${logicalActive ? 'ACTIVE' : 'inactive'} (${shiftRegPullMode})${label ? ` (${label})` : ''}`}
             >
-              <span className="font-bold text-sm">{bitValue}</span>
+              <span className="font-bold text-sm">{logicalActive ? 1 : 0}</span>
               <span className="text-[10px] opacity-80 mt-1">B{bitIndex}</span>
               {label && (
                 <span className="text-[9px] opacity-70 truncate max-w-full px-1">
@@ -61,8 +64,13 @@ export function ShiftRegisterDisplay({
       
       {/* Binary representation */}
       <div className="mt-2 text-center">
-        <div className="text-xs font-mono text-gray-600">
-          {registerState.value.toString(2).padStart(8, '0').split('').join(' ')}
+        <div className="text-xs font-mono text-gray-600" title={`Logical pattern (${shiftRegPullMode})`}>
+          {registerState.value
+            .toString(2)
+            .padStart(8, '0')
+            .split('')
+            .map(b => (shiftRegPullMode === 'pull-up' ? (b === '1' ? '0' : '1') : b))
+            .join(' ')}
         </div>
         <div className="text-xs text-gray-500 mt-1">
           Decimal: {registerState.value}
