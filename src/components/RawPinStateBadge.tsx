@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { RAW_STATE_CONFIG } from '@/lib/dev-config';
+import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
 
 interface RawPinStateBadgeProps {
   gpio: number;
@@ -22,6 +23,7 @@ export function RawPinStateBadge({
   showVoltage = RAW_STATE_CONFIG.showVoltageLabels,
   className 
 }: RawPinStateBadgeProps) {
+  const { gpioPullMode } = useRawStateConfig();
   const [isChanging, setIsChanging] = useState(false);
   const prevState = useRef(state);
 
@@ -38,6 +40,10 @@ export function RawPinStateBadge({
     }
   }, [state]);
 
+  // Physical voltage: state (true=HIGH)
+  // Logical active depends on pull mode: pull-up => LOW means button pressed/active
+  const logicalActive = gpioPullMode === 'pull-up' ? !state : state;
+
   return (
     <div 
       className={cn(
@@ -45,13 +51,13 @@ export function RawPinStateBadge({
         "px-3 py-2 rounded-md text-sm font-medium",
         "transition-all duration-200 min-w-[80px] text-center",
         "border shadow-sm",
-        state 
+        logicalActive 
           ? "bg-green-500 text-white border-green-600" 
           : "bg-gray-200 text-gray-700 border-gray-300",
         isChanging && "ring-2 ring-yellow-400 animate-pulse scale-105",
         className
       )}
-      title={`GPIO ${gpio}: ${state ? 'HIGH (3.3V)' : 'LOW (0V)'}`}
+      title={`GPIO ${gpio}: Physical ${state ? 'HIGH (3.3V)' : 'LOW (0V)'} | Logical ${logicalActive ? 'ACTIVE' : 'inactive'} (${gpioPullMode})`}
     >
       <div className="flex flex-col items-center gap-1">
         {RAW_STATE_CONFIG.showGpioNumbers && (
@@ -65,8 +71,8 @@ export function RawPinStateBadge({
         )}
         
         <div className="flex items-center gap-1">
-          <span className="font-mono font-bold">
-            {state ? 'HIGH' : 'LOW'}
+          <span className="font-mono font-bold" title={`Logical (${gpioPullMode}) interpretation`}>
+            {logicalActive ? 'ACTIVE' : 'idle'}
           </span>
           
           {showVoltage && (
@@ -101,14 +107,13 @@ export function GpioPinGrid({
     <div className={cn("gpio-pin-grid", className)}>
       <div className="grid grid-cols-5 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
         {pinsToShow.map(pin => {
-          const isHigh = (gpioMask & (1 << pin)) !== 0;
+          const physicalHigh = (gpioMask & (1 << pin)) !== 0;
           const label = pinLabels[pin];
-          
           return (
             <RawPinStateBadge
               key={pin}
               gpio={pin}
-              state={isHigh}
+              state={physicalHigh}
               label={label}
               className="text-xs px-2 py-1"
             />

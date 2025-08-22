@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Upload, RotateCcw, Trash2, HardDrive, FileText, AlertTriangle, TestTube } from 'lucide-react';
+import { Download, Upload, RotateCcw, Trash2, HardDrive, FileText, AlertTriangle, TestTube, CircuitBoard } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useDeviceConfig } from '@/hooks/useDeviceConfig';
 import { useDeviceContext } from '@/contexts/DeviceContext';
@@ -17,6 +17,9 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import type { StorageInfo } from '@/lib/types';
+import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 export function DeviceConfigManagement() {
   const { isConnected } = useDeviceContext();
@@ -35,6 +38,7 @@ export function DeviceConfigManagement() {
   const [files, setFiles] = useState<string[]>([]);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showFormatDialog, setShowFormatDialog] = useState(false);
+  const { gpioPullMode, shiftRegPullMode, toggleGpioPullMode, toggleShiftRegPullMode } = useRawStateConfig();
 
   // Load storage info
   const loadStorageInfo = async () => {
@@ -220,6 +224,64 @@ export function DeviceConfigManagement() {
             <HardDrive className="mr-2 h-4 w-4" />
             Load Storage Info
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Raw State Interpretation Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><CircuitBoard className="h-4 w-4" /> Raw State Interpretation</CardTitle>
+          <CardDescription>Configure how raw voltage levels map to logical ACTIVE state</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* GPIO Pull Mode */}
+            <div className="flex items-start gap-4 p-3 rounded border bg-muted/20">
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="gpio-pull-mode" className="flex items-center gap-2">GPIO Pull Mode
+                  <span className="text-xs font-normal text-muted-foreground">({gpioPullMode})</span>
+                </Label>
+                <p className="text-xs text-muted-foreground select-none">
+                  Determines which physical level represents logical ACTIVE for GPIO pins.
+                  {gpioPullMode === 'pull-up' ? ' LOW→ACTIVE, HIGH→idle' : ' HIGH→ACTIVE, LOW→idle'}
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <Switch
+                  id="gpio-pull-mode"
+                  checked={gpioPullMode === 'pull-up'}
+                  onCheckedChange={toggleGpioPullMode}
+                  className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-gray-400"
+                />
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground select-none ">{gpioPullMode === 'pull-up' ? 'Pull-Up' : 'Pull-Down'}</span>
+              </div>
+            </div>
+
+            {/* Shift Register Pull Mode */}
+            <div className="flex items-start gap-4 p-3 rounded border bg-muted/20">
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="shift-pull-mode" className="flex items-center gap-2">Shift Register Mode
+                  <span className="text-xs font-normal text-muted-foreground">({shiftRegPullMode})</span>
+                </Label>
+                <p className="text-xs text-muted-foreground select-none">
+                  Maps 74HC165 bit values to logical state.
+                  {shiftRegPullMode === 'pull-up' ? ' 0→ACTIVE, 1→idle' : ' 1→ACTIVE, 0→idle'}
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <Switch
+                  id="shift-pull-mode"
+                  checked={shiftRegPullMode === 'pull-up'}
+                  onCheckedChange={toggleShiftRegPullMode}
+                  className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-gray-400"
+                />
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground select-none">{shiftRegPullMode === 'pull-up' ? 'Pull-Up' : 'Pull-Down'}</span>
+              </div>
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground leading-relaxed select-none">
+            Changing these settings only affects how the frontend interprets displayed raw states. It does not reconfigure the device firmware electrical pull resistors.
+          </div>
         </CardContent>
       </Card>
 

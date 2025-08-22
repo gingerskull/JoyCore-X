@@ -14,6 +14,7 @@ import { useDeviceContext } from '@/contexts/DeviceContext';
 
 // Raw state components
 import { useRawPinState } from '@/hooks/useRawPinState';
+import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
 import { GpioPinBadge, MatrixConnectionBadge, ShiftRegBitBadge } from '@/components/RawStateBadge';
 import { RAW_STATE_CONFIG } from '@/lib/dev-config';
 
@@ -45,6 +46,12 @@ interface ButtonEvent {
   button_id: number;
   pressed: boolean;
   timestamp: string;
+}
+
+// Utility: extract physical mapping segment from a button name e.g. "(Pin 12)" or "(Matrix[1,2])" etc.
+function extractPhysicalSegment(name: string): string | null {
+  const match = name.match(/\(.*\)/);
+  return match ? match[0] : null;
 }
 
 // (Mapping details interface removed after optimization; reintroduce if advanced mapping UI needed.)
@@ -139,6 +146,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
 
   // Raw hardware state hook
   const rawState = useRawPinState();
+  const { gpioPullMode, shiftRegPullMode } = useRawStateConfig();
   
   // Debug raw state (disabled to reduce console noise)
   useEffect(() => {
@@ -459,6 +467,34 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
     }
   };
 
+  // Determine if a physical input (parsed mapping) is presently active in RAW mode.
+  const isPhysicalActive = useCallback((info: ParsedButtonInfo): boolean => {
+    if (rawState.displayMode !== 'raw') return false;
+    // Direct GPIO: determine physical level then apply pull mode interpretation
+    if (info.type === 'direct' && info.index !== undefined && rawState.gpioStates !== null) {
+      const bitMask = 1 << info.index;
+      const physicalHigh = (rawState.gpioStates & bitMask) !== 0; // voltage level
+      const logicalActive = gpioPullMode === 'pull-up' ? !physicalHigh : physicalHigh;
+      return logicalActive;
+    }
+    // Matrix remains unchanged (connection closed = active)
+    if (info.type === 'matrix' && rawState.matrixStates) {
+      const conn = rawState.matrixStates.connections.find(c => c.row === info.row && c.col === info.col);
+      return !!conn?.is_connected;
+    }
+    // Shift register: physical bit then interpreted by pull mode
+    if (info.type === 'shiftreg' && info.register !== undefined && info.bit !== undefined) {
+      const reg = rawState.shiftRegStates.find(r => r.register_id === info.register);
+      if (reg) {
+        const bitMask = 1 << info.bit;
+        const physicalHigh = (reg.value & bitMask) !== 0; // bit=1 means HIGH
+        const logicalActive = shiftRegPullMode === 'pull-up' ? !physicalHigh : physicalHigh;
+        return logicalActive;
+      }
+    }
+    return false;
+  }, [rawState, gpioPullMode, shiftRegPullMode]);
+
   if (!deviceStatus || !isConnected) {
     return (
       <Card>
@@ -770,10 +806,22 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                 <TableBody>
                 {editableButtons.map((button, idx) => {
                   const state = getButtonState(button);
+                  // Parse physical mapping each render for editable list (may differ from firmware snapshot)
+                  const physSegment = extractPhysicalSegment(button.name);
+                  const parsedInfo = physSegment ? parseButtonName(`Button ${button.id} ${physSegment}`) : null;
+                  // Active criteria:
+                  //  - In HID mode: logical button currently pressed
+                  //  - In RAW mode: associated physical resource is active (heuristic per type)
+                  const logicalPressed = rawState.displayMode === 'hid' && isButtonPressed(button.id);
+                  const physicalActive = rawState.displayMode === 'raw' && parsedInfo ? isPhysicalActive(parsedInfo) : false;
+                  const highlight = (logicalPressed || physicalActive) && !!physSegment; // only highlight if mapping exists
                   return (
                     <TableRow 
                       key={`row-${idx}-${button.id}`} 
-                      className={!state.enabled ? 'opacity-50' : ''}
+                      className={['',
+                        !state.enabled ? 'opacity-50' : '',
+                        highlight ? 'bg-green-500/50' : ''
+                      ].filter(Boolean).join('')}
                     >
                       <TableCell className="p-2">
                         <Checkbox

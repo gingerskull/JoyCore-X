@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { RAW_STATE_CONFIG } from '@/lib/dev-config';
+import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
 
 type RawStateBadgeMode = 'gpio' | 'matrix' | 'shiftreg';
 type RawStateBadgeState = 'inactive' | 'active';
@@ -49,7 +50,7 @@ export function RawStateBadge({ mode, state, label, tooltip, className }: RawSta
   return (
     <div
       className={cn(
-        "w-12 h-12 rounded flex items-center justify-center text-[12px] font-mono font-bold transition-colors duration-100 select-none",
+        "w-12 h-12 rounded flex items-center justify-center text-[12px] font-mono font-bold transition-colors duration-50 select-none",
         colorSchemes[mode][state],
         isChanging && "ring-2 ring-yellow-400",
         className
@@ -70,9 +71,12 @@ interface GpioPinBadgeProps {
 }
 
 export function GpioPinBadge({ pin, gpioMask, label, className }: GpioPinBadgeProps) {
-  const isHigh = (gpioMask & (1 << pin)) !== 0;
+  const { gpioPullMode } = useRawStateConfig();
+  const physicalHigh = (gpioMask & (1 << pin)) !== 0; // voltage level
+  // Interpretation: if pull-up, logical active when LOW (0V). If pull-down, logical active when HIGH (3.3V)
+  const isHigh = gpioPullMode === 'pull-up' ? !physicalHigh : physicalHigh;
   const displayLabel = label || pin.toString();
-  const tooltip = `GPIO ${pin}: ${isHigh ? 'HIGH (3.3V)' : 'LOW (0V)'}${label ? ` (${label})` : ''}`;
+  const tooltip = `GPIO ${pin}: ${physicalHigh ? 'HIGH (3.3V)' : 'LOW (0V)'} | Logical: ${isHigh ? 'ACTIVE' : 'inactive'} (${gpioPullMode})${label ? ` (${label})` : ''}`;
 
   return (
     <RawStateBadge
@@ -117,10 +121,11 @@ interface ShiftRegBitBadgeProps {
 }
 
 export function ShiftRegBitBadge({ registerId, bitIndex, registerValue, label, className }: ShiftRegBitBadgeProps) {
-  const bitValue = (registerValue >> bitIndex) & 1;
-  const isHigh = bitValue === 1;
+  const { shiftRegPullMode } = useRawStateConfig();
+  const bitValue = (registerValue >> bitIndex) & 1; // physical level (1=HIGH)
+  const isHigh = shiftRegPullMode === 'pull-up' ? bitValue === 0 : bitValue === 1; // logical active
   const displayLabel = label || bitIndex.toString();
-  const tooltip = `Register ${registerId}, Bit ${bitIndex}: ${isHigh ? 'HIGH' : 'LOW'}${label ? ` (${label})` : ''}`;
+  const tooltip = `Register ${registerId}, Bit ${bitIndex}: ${bitValue ? 'HIGH' : 'LOW'} | Logical: ${isHigh ? 'ACTIVE' : 'inactive'} (${shiftRegPullMode})${label ? ` (${label})` : ''}`;
 
   return (
     <RawStateBadge
