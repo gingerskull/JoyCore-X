@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 use super::{Result, SerialError, SerialInterface};
+use crate::serial::unified::{UnifiedSerialHandle};
+use crate::serial::unified::types::{CommandSpec, ResponseMatcher};
+use std::time::Duration;
 
 /// JoyCore configuration protocol implementation
 /// Based on the Qt C++ implementation, this handles the text-based protocol
 /// for communicating with RP2040-based HOTAS controllers
-pub struct ConfigProtocol {
-    interface: SerialInterface,
-}
+pub struct ConfigProtocol { handle: UnifiedSerialHandle, interface: std::sync::Arc<tokio::sync::Mutex<SerialInterface>> }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceStatus {
@@ -49,14 +50,13 @@ pub struct ProfileConfig {
 }
 
 impl ConfigProtocol {
-    pub fn new(interface: SerialInterface) -> Self {
-        Self { interface }
-    }
+    pub fn new(handle: UnifiedSerialHandle, interface: std::sync::Arc<tokio::sync::Mutex<SerialInterface>>) -> Self { Self { handle, interface } }
 
 
     /// Initialize communication with the device
     pub async fn init(&mut self) -> Result<()> {
-        if !self.interface.is_connected() {
+    let connected = { let guard = self.interface.lock().await; guard.is_connected() };
+    if !connected {
             return Err(SerialError::ConnectionFailed("Device not connected".to_string()));
         }
 
@@ -67,17 +67,21 @@ impl ConfigProtocol {
     /// Get device status and capabilities using actual JoyCore-FW protocol
     pub async fn get_device_status(&mut self) -> Result<DeviceStatus> {
         // Get firmware version from device info if available
-        let firmware_version = self.interface.device_info()
+        let firmware_version = { let guard = self.interface.lock().await; guard.device_info()
             .and_then(|info| info.firmware_version.clone())
-            .unwrap_or_else(|| "Unknown".to_string());
+            .unwrap_or_else(|| "Unknown".to_string()) };
 
         // Get device name from device info
-        let device_name = self.interface.device_info()
+        let device_name = { let guard = self.interface.lock().await; guard.device_info()
             .and_then(|info| info.product.clone())
-            .unwrap_or_else(|| "JoyCore HOTAS Controller".to_string());
+            .unwrap_or_else(|| "JoyCore HOTAS Controller".to_string()) };
 
-        // Use the actual STATUS command from the firmware
-        let status_response = self.interface.send_command("STATUS").await?;
+        // STATUS response sample: "Config Status - Storage: OK, Loaded: YES, Version: 7"
+        // Single line; matcher now directly targets stable prefix. No retry/settle delay needed after correct matcher.
+        let status_spec = CommandSpec { name: "STATUS", timeout: Duration::from_millis(1200), matcher: ResponseMatcher::Contains("Config Status"), test_min_duration_ms: None };
+        let status_response = self.handle.send_command("STATUS".to_string(), status_spec).await
+            .map_err(|e| { log::error!("STATUS command failed: {}", e); e })?
+            .lines.join("\n");
         
         log::debug!("Raw status response: {}", status_response);
         // log::info!("Device status: firmware={}, device={}", firmware_version, device_name);
@@ -98,7 +102,8 @@ impl ConfigProtocol {
     /// Read current axis configuration
     pub async fn read_axis_config(&mut self, axis_id: u8) -> Result<AxisConfig> {
         let command = format!("AXIS_GET:{}", axis_id);
-        let response = self.interface.send_command(&command).await?;
+    let spec = CommandSpec { name: "AXIS_GET", timeout: Duration::from_millis(500), matcher: ResponseMatcher::UntilPrefix("AXIS:"), test_min_duration_ms: None };
+        let response = { let resp = self.handle.send_command(command.clone(), spec).await?; resp.lines.join("\n") };
         
         // Parse axis configuration from response
         // Format: "AXIS:id,name,min,max,center,deadzone,curve,inverted"
@@ -138,7 +143,7 @@ impl ConfigProtocol {
             config.inverted
         );
         
-        let response = self.interface.send_command(&command).await?;
+    let spec = CommandSpec { name: "AXIS_SET", timeout: Duration::from_millis(500), matcher: ResponseMatcher::Contains("OK"), test_min_duration_ms: None }; let response = { let resp = self.handle.send_command(command.clone(), spec).await?; resp.lines.join("\n") };
         
         if response.starts_with("OK") {
             Ok(())
@@ -150,7 +155,7 @@ impl ConfigProtocol {
     /// Read button configuration
     pub async fn read_button_config(&mut self, button_id: u8) -> Result<ButtonConfig> {
         let command = format!("BUTTON_GET:{}", button_id);
-        let response = self.interface.send_command(&command).await?;
+    let spec = CommandSpec { name: "BUTTON_GET", timeout: Duration::from_millis(500), matcher: ResponseMatcher::UntilPrefix("BUTTON:"), test_min_duration_ms: None }; let response = { let resp = self.handle.send_command(command.clone(), spec).await?; resp.lines.join("\n") };
         
         // Parse button configuration from response
         // Format: "BUTTON:id,name,function,enabled"
@@ -181,8 +186,7 @@ impl ConfigProtocol {
             config.function,
             config.enabled
         );
-        
-        let response = self.interface.send_command(&command).await?;
+    let spec = CommandSpec { name: "BUTTON_SET", timeout: Duration::from_millis(500), matcher: ResponseMatcher::Contains("OK"), test_min_duration_ms: None }; let response = { let resp = self.handle.send_command(command.clone(), spec).await?; resp.lines.join("\n") };
         
         if response.starts_with("OK") {
             Ok(())
@@ -204,20 +208,17 @@ impl ConfigProtocol {
 
     /// Reset device to factory defaults using actual JoyCore-FW command
     pub async fn factory_reset(&mut self) -> Result<()> {
-        let _response = self.interface.send_command("FORCE_DEFAULT_CONFIG").await?;
+    let spec = CommandSpec { name: "FORCE_DEFAULT_CONFIG", timeout: Duration::from_millis(1500), matcher: ResponseMatcher::Contains("OK"), test_min_duration_ms: None }; let _response = { let resp = self.handle.send_command("FORCE_DEFAULT_CONFIG".to_string(), spec).await?; resp.lines.join("\n") };
         log::warn!("Device reset to factory defaults");
         Ok(())
     }
 
     /// Get storage information from the device
-    pub async fn get_storage_info(&mut self) -> Result<String> {
-        let response = self.interface.send_command("STORAGE_INFO").await?;
-        Ok(response)
-    }
+    pub async fn get_storage_info(&mut self) -> Result<String> { let spec = CommandSpec { name: "STORAGE_INFO", timeout: Duration::from_millis(500), matcher: ResponseMatcher::Contains("STORAGE_"), test_min_duration_ms: None }; let response = { let resp = self.handle.send_command("STORAGE_INFO".to_string(), spec).await?; resp.lines.join("\n") }; Ok(response) }
 
     /// List files available on the device
     pub async fn list_files(&mut self) -> Result<Vec<String>> {
-        let response = self.interface.send_command("LIST_FILES").await?;
+    let spec = CommandSpec { name: "LIST_FILES", timeout: Duration::from_millis(1000), matcher: ResponseMatcher::Contains("END_FILES"), test_min_duration_ms: None }; let response = { let resp = self.handle.send_command("LIST_FILES".to_string(), spec).await?; resp.lines.join("\n") };
         
         // Parse the response - filter out protocol markers
         let files: Vec<String> = response
@@ -233,7 +234,7 @@ impl ConfigProtocol {
     pub async fn read_file(&mut self, filename: &str) -> Result<Vec<u8>> {
         log::info!("Reading file: {}", filename);
         let command = format!("READ_FILE {}", filename);
-        let response = self.interface.send_command(&command).await?;
+    let spec = CommandSpec { name: "READ_FILE", timeout: Duration::from_millis(3000), matcher: ResponseMatcher::Contains("FILE_DATA:"), test_min_duration_ms: None }; let response = { let resp = self.handle.send_command(command.clone(), spec).await?; resp.lines.join("\n") };
         
         log::info!("Raw response length: {} chars", response.len());
         log::info!("Raw response: '{}'", response);
@@ -294,11 +295,7 @@ impl ConfigProtocol {
     }
 
     /// Save current configuration to device storage
-    pub async fn save_config(&mut self) -> Result<()> {
-        let _response = self.interface.send_command("SAVE_CONFIG").await?;
-        log::info!("Configuration saved to device");
-        Ok(())
-    }
+    pub async fn save_config(&mut self) -> Result<()> { let spec = CommandSpec { name: "SAVE_CONFIG", timeout: Duration::from_millis(1000), matcher: ResponseMatcher::Contains("OK"), test_min_duration_ms: None }; let _ = self.handle.send_command("SAVE_CONFIG".to_string(), spec).await?; log::info!("Configuration saved to device"); Ok(()) }
 
     /// Write a file to the device storage with raw binary data
     pub async fn write_raw_file(&mut self, _filename: &str, _data: &[u8]) -> Result<()> {
@@ -317,22 +314,10 @@ impl ConfigProtocol {
     }
 
     /// Format the device storage (deletes all files)
-    pub async fn format_storage(&mut self) -> Result<()> {
-        // Note: FORMAT_STORAGE is a suggested extension not yet implemented in firmware
-        // Try using FORCE_DEFAULT_CONFIG which is the actual firmware command
-        let _response = self.interface.send_command("FORCE_DEFAULT_CONFIG").await?;
-        log::warn!("Used FORCE_DEFAULT_CONFIG to reset device (FORMAT_STORAGE not available)");
-        Ok(())
-    }
+    pub async fn format_storage(&mut self) -> Result<()> { let spec = CommandSpec { name: "FORCE_DEFAULT_CONFIG", timeout: Duration::from_millis(1500), matcher: ResponseMatcher::Contains("OK"), test_min_duration_ms: None }; let _ = self.handle.send_command("FORCE_DEFAULT_CONFIG".to_string(), spec).await?; log::warn!("Used FORCE_DEFAULT_CONFIG to reset device (FORMAT_STORAGE not available)"); Ok(()) }
 
     /// Reset device configuration to defaults
-    pub async fn reset_to_defaults(&mut self) -> Result<()> {
-        // Note: RESET_DEFAULTS is a suggested extension not yet implemented in firmware
-        // Use FORCE_DEFAULT_CONFIG which is the actual firmware command
-        let _response = self.interface.send_command("FORCE_DEFAULT_CONFIG").await?;
-        log::info!("Device reset to default configuration using FORCE_DEFAULT_CONFIG");
-        Ok(())
-    }
+    pub async fn reset_to_defaults(&mut self) -> Result<()> { let spec = CommandSpec { name: "FORCE_DEFAULT_CONFIG", timeout: Duration::from_millis(1500), matcher: ResponseMatcher::Contains("OK"), test_min_duration_ms: None }; let _ = self.handle.send_command("FORCE_DEFAULT_CONFIG".to_string(), spec).await?; log::info!("Device reset to default configuration using FORCE_DEFAULT_CONFIG"); Ok(()) }
 
     /// Get detailed storage information
     pub async fn get_storage_details(&mut self) -> Result<StorageInfo> {
@@ -364,14 +349,10 @@ impl ConfigProtocol {
     }
 
     /// Get reference to the serial interface
-    pub fn interface(&self) -> &SerialInterface {
-        &self.interface
-    }
-
-    /// Get mutable reference to the serial interface
-    pub fn interface_mut(&mut self) -> &mut SerialInterface {
-        &mut self.interface
-    }
+    pub(crate) async fn send_locked(&self, cmd: &str) -> Result<String> { let spec = CommandSpec { name: "GENERIC", timeout: Duration::from_millis(500), matcher: ResponseMatcher::Contains("OK"), test_min_duration_ms: None }; let resp = self.handle.send_command(cmd.to_string(), spec).await?; Ok(resp.lines.join("\n")) }
+    pub(crate) async fn read_data_locked(&self, buffer: &mut [u8], timeout_ms: u64) -> Result<usize> { let mut guard = self.interface.lock().await; guard.read_data(buffer, timeout_ms).await }
+    pub(crate) async fn disconnect_locked(&self) { let mut guard = self.interface.lock().await; guard.disconnect(); }
+    pub fn clone_interface_arc(&self) -> std::sync::Arc<tokio::sync::Mutex<SerialInterface>> { self.interface.clone() }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
