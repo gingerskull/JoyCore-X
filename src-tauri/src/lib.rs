@@ -71,13 +71,12 @@ pub fn run() {
       commands::stop_raw_state_monitoring,
     ])
     .setup(|app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
+      // Enable logging in all builds to help diagnose blank window issues.
+      app.handle().plugin(
+        tauri_plugin_log::Builder::default()
+          .level(log::LevelFilter::Info)
+          .build(),
+      )?;
       
       // Pass app handle to device manager for event emission
       let device_manager: tauri::State<Arc<DeviceManager>> = app.state();
