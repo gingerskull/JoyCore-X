@@ -1,3 +1,4 @@
+// (Removed stray spec initialization inserted by patch error)
 use std::sync::Arc;
 use std::path::PathBuf;
 use tauri::{State, Emitter};
@@ -10,6 +11,7 @@ use crate::serial::StorageInfo;
 use crate::hid::ButtonStates;
 use crate::update::{UpdateService, VersionCheckResult};
 use crate::config::binary::{BinaryConfig, UIAxisConfig, UIButtonConfig};
+use crate::serial::unified::types::{CommandSpec, ResponseMatcher, SerialCommand};
 
 /// Discover available JoyCore devices
 #[tauri::command]
@@ -668,4 +670,44 @@ pub async fn stop_raw_state_monitoring(
 ) -> Result<(), String> {
     device_manager.stop_raw_state_monitoring().await
         .map_err(|e| format!("Failed to stop monitoring: {}", e))
+}
+
+// Unified serial
+#[tauri::command]
+pub async fn unified_get_snapshot(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<crate::serial::unified::types::RawStateSnapshot>, String> {
+    if let Some(handle) = device_manager.get_unified_serial_handle().await {
+        let snap = handle.snapshot_receiver().borrow().clone();
+        return Ok(Some((*snap).clone()));
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+pub async fn unified_get_metrics(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<crate::serial::unified::types::MetricsSnapshot>, String> {
+    if let Some(handle) = device_manager.get_unified_serial_handle().await {
+        let m = handle.metrics_receiver().borrow().clone();
+        return Ok(Some(m));
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+pub async fn unified_status(
+    device_manager: State<'_, Arc<DeviceManager>>,
+) -> Result<Option<Vec<String>>, String> {
+    if let Some(handle) = device_manager.get_unified_serial_handle().await {
+    let spec = CommandSpec { name: "STATUS", matcher: ResponseMatcher::UntilPrefix("OK"), timeout: std::time::Duration::from_millis(500), test_min_duration_ms: None };
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        handle.cmd_tx.send(SerialCommand::Write { cmd: "STATUS".to_string(), spec, responder: tx }).await.map_err(|e| format!("Send failed: {}", e))?;
+        match rx.await {
+            Ok(Ok(resp)) => return Ok(Some(resp.lines)),
+            Ok(Err(e)) => return Err(format!("STATUS error: {}", e)),
+            Err(e) => return Err(format!("Channel error: {}", e)),
+        }
+    }
+    Ok(None)
 }

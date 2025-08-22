@@ -1,8 +1,10 @@
 pub mod interface;
 pub mod protocol;
+pub mod unified;
 
 pub use interface::SerialInterface;
 pub use protocol::{ConfigProtocol, StorageInfo};
+pub use unified::*;
 
 use serde::{Deserialize, Serialize};
 

@@ -7,6 +7,12 @@ const STORED_AXIS_CONFIG_SIZE: usize = 15;
 const MAX_PIN_MAP_COUNT: u8 = 32;
 const MAX_LOGICAL_INPUT_COUNT: u8 = 64;
 
+#[cfg(test)]
+fn calculate_crc32(data: &[u8]) -> u32 { let mut checksum: u32 = 0xFFFFFFFF; for &byte in data { checksum = crc32_update_byte(checksum, byte); } !checksum }
+#[cfg(not(test))]
+#[allow(dead_code)]
+fn calculate_crc32(_data: &[u8]) -> u32 { 0 }
+
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ConfigHeader {
@@ -223,12 +229,10 @@ impl BinaryConfig {
             buffer.extend_from_slice(input_bytes);
         }
 
-        // Calculate CRC32 checksum
-        let checksum = calculate_crc32(&buffer);
-        
-        // Update checksum in header
-        let checksum_bytes = checksum.to_le_bytes();
-        buffer[8..12].copy_from_slice(&checksum_bytes);
+    // Calculate firmware CRC32 checksum (skip checksum field)
+    let checksum = calculate_firmware_crc32(&buffer);
+    // Write checksum into header field (bytes 8..12)
+    buffer[8..12].copy_from_slice(&checksum.to_le_bytes());
 
         Ok(buffer)
     }
@@ -530,15 +534,6 @@ fn crc32_update_byte(mut checksum: u32, byte: u8) -> u32 {
 
 /// Calculate CRC32 checksum matching firmware implementation exactly
 /// Uses firmware-specific algorithm with polynomial 0xEDB88320
-fn calculate_crc32(data: &[u8]) -> u32 {
-    let mut checksum: u32 = 0xFFFFFFFF; // Initial value
-    
-    for &byte in data {
-        checksum = crc32_update_byte(checksum, byte);
-    }
-    
-    !checksum // Final bitwise NOT
-}
 
 #[cfg(test)]
 mod tests {

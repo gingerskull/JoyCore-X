@@ -306,8 +306,7 @@ impl UpdateService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use semver::Version;
+    use semver::Version; // super::* not needed
 
     #[test]
     fn test_version_comparison() {
