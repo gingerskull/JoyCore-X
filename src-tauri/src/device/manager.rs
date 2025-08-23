@@ -12,6 +12,7 @@ use crate::update::{UpdateService, VersionCheckResult};
 use crate::config::BinaryConfig;
 use crate::hid::{HidReader, ButtonStates};
 use super::{Device, ConnectionState, ProfileManager, DeviceError, Result, FirmwareUpdateSettings};
+use super::port_monitor::{create_port_monitor, PortMonitor, PortEvent};
 
 /// Central device management system
 /// Handles device discovery, connection management, and configuration
@@ -27,6 +28,10 @@ pub struct DeviceManager {
     key_to_id: Arc<Mutex<HashMap<String, Uuid>>>,
     /// One-shot guarded initial discovery burst after app handle is set (bounded, not polling)
     initial_discovery_started: Arc<AtomicBool>,
+    /// Port monitor for event-driven device discovery
+    port_monitor: Arc<Mutex<Option<Box<dyn PortMonitor>>>>,
+    /// Handle for port monitor task
+    port_monitor_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl DeviceManager {
@@ -57,9 +62,63 @@ impl DeviceManager {
             unified_handles: Arc::new(Mutex::new(HashMap::new())),
             key_to_id: Arc::new(Mutex::new(HashMap::new())),
             initial_discovery_started: Arc::new(AtomicBool::new(false)),
+            port_monitor: Arc::new(Mutex::new(None)),
+            port_monitor_handle: Arc::new(Mutex::new(None)),
         }
     }
 
+    /// Start the port monitor for event-driven device discovery
+    async fn start_port_monitor(&self) {
+        let mut monitor = create_port_monitor();
+        
+        if let Err(e) = monitor.start().await {
+            log::error!("Failed to start port monitor: {}", e);
+            return;
+        }
+        
+        if let Some(mut rx) = monitor.get_receiver() {
+            let mgr = self.clone();
+            let handle = tokio::spawn(async move {
+                log::info!("Port monitor started, listening for device changes");
+                
+                while let Some(event) = rx.recv().await {
+                    log::info!("Port event received: {:?}", event);
+                    
+                    match event {
+                        PortEvent::PortAdded(_) | PortEvent::PortRemoved(_) => {
+                            // Trigger device discovery on any port change
+                            if let Err(e) = mgr.discover_devices().await {
+                                log::error!("Failed to discover devices after port event: {}", e);
+                            }
+                        }
+                    }
+                }
+                
+                log::info!("Port monitor event loop ended");
+            });
+            
+            *self.port_monitor_handle.lock().await = Some(handle);
+        }
+        
+        *self.port_monitor.lock().await = Some(monitor);
+    }
+    
+    /// Stop the port monitor
+    async fn stop_port_monitor(&self) {
+        // Stop the event loop
+        if let Some(handle) = self.port_monitor_handle.lock().await.take() {
+            handle.abort();
+            let _ = handle.await;
+        }
+        
+        // Stop the monitor itself
+        if let Some(mut monitor) = self.port_monitor.lock().await.take() {
+            if let Err(e) = monitor.stop().await {
+                log::error!("Error stopping port monitor: {}", e);
+            }
+        }
+    }
+    
     /// Sanitize a firmware version string so it can be parsed as proper semver.
     /// - Trims whitespace and any embedded NULs
     /// - Splits on line breaks and takes the first non-empty line
@@ -122,21 +181,9 @@ impl DeviceManager {
             }
         }
 
-        // Bounded initial discovery burst (no continuous polling). Runs only once.
+        // Start port monitor for event-driven device discovery
         if !self.initial_discovery_started.swap(true, Ordering::SeqCst) {
-            let mgr = self.clone();
-            tokio::spawn(async move {
-                // Skip if we already have devices
-                if !mgr.get_devices().await.is_empty() { return; }
-                let attempts = 10u8; // ~2.5s worst-case (increasing backoff)
-                for i in 0..attempts {
-                    if let Err(e) = mgr.discover_devices().await { log::debug!("Startup discover attempt {} failed: {}", i, e); }
-                    if !mgr.get_devices().await.is_empty() { break; }
-                    // Exponential-ish backoff but capped
-                    let delay_ms = 100 + (i as u64 * 50);
-                    tokio::time::sleep(std::time::Duration::from_millis(delay_ms.min(400))).await;
-                }
-            });
+            self.start_port_monitor().await;
         }
     }
 
@@ -1088,5 +1135,17 @@ impl DeviceManager {
 impl Default for DeviceManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Drop for DeviceManager {
+    fn drop(&mut self) {
+        // Create a runtime to stop port monitor if needed
+        let rt = tokio::runtime::Runtime::new();
+        if let Ok(runtime) = rt {
+            let _ = runtime.block_on(async {
+                self.stop_port_monitor().await;
+            });
+        }
     }
 }

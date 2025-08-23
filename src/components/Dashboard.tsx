@@ -52,14 +52,8 @@ export function Dashboard() {
   // Get current firmware version from connected device
   const { hasUpdateAvailable, latestVersion, currentVersion: currentFirmwareVersion } = useFirmwareUpdatesContext();
 
-  // Auto-discover devices on mount
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      discoverDevices();
-    }, 100); // Small delay to allow UI to render first
-    
-    return () => clearTimeout(timeoutId);
-  }, []); // Empty dependency array to run only once on mount
+  // Device discovery is now event-driven via port monitor in the backend
+  // No need for auto-discovery on mount
 
   // Load device status when connected
   useEffect(() => {
