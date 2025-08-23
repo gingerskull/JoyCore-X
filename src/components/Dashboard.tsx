@@ -54,8 +54,12 @@ export function Dashboard() {
 
   // Auto-discover devices on mount
   useEffect(() => {
-    discoverDevices();
-  }, [discoverDevices]);
+    const timeoutId = setTimeout(() => {
+      discoverDevices();
+    }, 100); // Small delay to allow UI to render first
+    
+    return () => clearTimeout(timeoutId);
+  }, []); // Empty dependency array to run only once on mount
 
   // Load device status when connected
   useEffect(() => {
