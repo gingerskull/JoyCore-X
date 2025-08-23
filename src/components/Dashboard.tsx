@@ -7,8 +7,7 @@ import { Separator } from '@/components/ui/separator';
 
 import { useDeviceContext } from '@/contexts/DeviceContext';
 import { useDeviceConfigReader } from '@/hooks/useDeviceConfigReader';
-import { DeviceList } from './DeviceList';
-import { CollapsedSidebar } from './CollapsedSidebar';
+import { Sidebar } from './Sidebar';
 import { ConfigurationTabs } from './ConfigurationTabs';
 import { FirmwareUpdateDialog } from './FirmwareUpdateDialog';
 import { FirmwareUpdateNotification } from './FirmwareUpdateNotification';
@@ -53,10 +52,8 @@ export function Dashboard() {
   // Get current firmware version from connected device
   const { hasUpdateAvailable, latestVersion, currentVersion: currentFirmwareVersion } = useFirmwareUpdatesContext();
 
-  // Auto-discover devices on mount
-  useEffect(() => {
-    discoverDevices();
-  }, [discoverDevices]);
+  // Device discovery is now event-driven via port monitor in the backend
+  // No need for auto-discovery on mount
 
   // Load device status when connected
   useEffect(() => {
@@ -149,34 +146,17 @@ export function Dashboard() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <div className={`${sidebarCollapsed ? 'w-20' : 'w-80'} border-r transition-all duration-300 ease-in-out`}>
-          {sidebarCollapsed ? (
-            <CollapsedSidebar 
-              onExpand={() => setSidebarCollapsed(false)}
-              parsedAxes={parsedAxes}
-              parsedButtons={parsedButtons}
-              setParsedAxes={setParsedAxes}
-              setParsedButtons={setParsedButtons}
-              setDevicePinAssignments={setDevicePinAssignments}
-              onUpdateDialogOpen={handleUpdateDialogOpen}
-            />
-          ) : (
-            <div className="p-3 h-full overflow-y-auto">
-              <DeviceList 
-                onCollapse={() => setSidebarCollapsed(true)}
-                deviceCount={devices.length}
-                onRefresh={handleRefresh}
-                isLoading={isLoading}
-                parsedAxes={parsedAxes}
-                parsedButtons={parsedButtons}
-                setParsedAxes={setParsedAxes}
-                setParsedButtons={setParsedButtons}
-                setDevicePinAssignments={setDevicePinAssignments}
-                onUpdateDialogOpen={handleUpdateDialogOpen}
-              />
-            </div>
-          )}
-        </div>
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onRefresh={handleRefresh}
+          isRefreshing={isLoading}
+          parsedAxes={parsedAxes}
+          parsedButtons={parsedButtons}
+          setParsedAxes={setParsedAxes}
+          setParsedButtons={setParsedButtons}
+          setDevicePinAssignments={setDevicePinAssignments}
+          onUpdateDialogOpen={handleUpdateDialogOpen}
+        />
 
         {/* Main Panel */}
         <div className="flex-1 flex flex-col overflow-hidden">

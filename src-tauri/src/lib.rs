@@ -17,6 +17,14 @@ pub fn run() {
 
   tauri::Builder::default()
     .manage(device_manager)
+    .on_window_event(|window, event| {
+      if let tauri::WindowEvent::CloseRequested { .. } = event {
+  let dm_opt = window.try_state::<Arc<DeviceManager>>().map(|s| s.inner().clone());
+        if let Some(dm) = dm_opt {
+          tauri::async_runtime::spawn(async move { dm.shutdown().await; });
+        }
+      }
+    })
     .invoke_handler(tauri::generate_handler![
       commands::discover_devices,
   commands::force_discover_devices,
@@ -63,6 +71,7 @@ pub fn run() {
       commands::hid_button_bit_diagnostics,
       // Raw hardware state commands
       commands::get_raw_state_display_mode,
+  commands::set_raw_state_display_mode,
       commands::read_raw_gpio_states,
       commands::read_raw_matrix_state,
       commands::read_raw_shift_reg_state,
@@ -71,13 +80,12 @@ pub fn run() {
       commands::stop_raw_state_monitoring,
     ])
     .setup(|app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
+      // Enable logging in all builds to help diagnose blank window issues.
+      app.handle().plugin(
+        tauri_plugin_log::Builder::default()
+          .level(log::LevelFilter::Info)
+          .build(),
+      )?;
       
       // Pass app handle to device manager for event emission
       let device_manager: tauri::State<Arc<DeviceManager>> = app.state();

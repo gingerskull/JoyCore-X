@@ -1,5 +1,6 @@
 pub mod manager;
 pub mod models;
+pub mod port_monitor;
 
 pub use manager::DeviceManager;
 pub use models::*;

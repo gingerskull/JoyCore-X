@@ -633,6 +633,47 @@ pub async fn get_raw_state_display_mode() -> Result<String, String> {
     Ok(crate::raw_state::get_display_mode_string())
 }
 
+/// Set the raw state / HID display mode ("raw", "hid", or "both") and manage monitoring transitions
+#[tauri::command]
+pub async fn set_raw_state_display_mode(
+    device_manager: State<'_, Arc<DeviceManager>>,
+    app_handle: tauri::AppHandle,
+    mode: String,
+) -> Result<(), String> {
+    // Parse desired mode
+    let new_mode = crate::raw_state::DisplayMode::from_str(&mode)
+        .ok_or_else(|| format!("Invalid display mode: {}", mode))?;
+    let current = crate::raw_state::get_display_mode();
+    if current == new_mode { return Ok(()); }
+
+    log::info!("Changing display mode from {:?} to {:?}", current, new_mode);
+    crate::raw_state::set_display_mode(new_mode);
+
+    // Handle transitions
+    // If entering a mode that includes Raw and we have a connected device, ensure monitoring started
+    if matches!(new_mode, crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both) {
+        if let Some(_id) = device_manager.get_connected_device_id().await { // device connected
+            if let Err(e) = device_manager.start_raw_state_monitoring(app_handle.clone()).await {
+                log::warn!("Failed to start raw monitoring after mode change: {}", e);
+            }
+        }
+    } else {
+        // Leaving raw (to HID) -> stop monitoring if active
+        if let Err(e) = device_manager.stop_raw_state_monitoring().await { log::debug!("Stop raw monitoring (mode change) error: {}", e); }
+    }
+
+    // If entering a mode that includes HID, ensure HID connected
+    if matches!(new_mode, crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) {
+        if let Some(_id) = device_manager.get_connected_device_id().await {
+            if let Err(e) = device_manager.connect_hid().await { log::warn!("Failed to connect HID after mode change: {}", e); }
+        }
+    } else {
+        // Leaving HID portion -> disconnect if active
+        if let Err(e) = device_manager.disconnect_hid().await { log::debug!("Disconnect HID (mode change) error: {}", e); }
+    }
+    Ok(())
+}
+
 /// Read current GPIO states from connected device
 #[tauri::command]
 pub async fn read_raw_gpio_states(
