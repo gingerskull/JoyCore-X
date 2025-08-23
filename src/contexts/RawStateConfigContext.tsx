@@ -21,8 +21,8 @@ interface PersistedState {
 }
 
 const defaultState: PersistedState = {
-  gpioPullMode: 'pull-down', // default typical for input with external pull-down
-  shiftRegPullMode: 'pull-down',
+  gpioPullMode: 'pull-up', // default typical for input with external pull-up
+  shiftRegPullMode: 'pull-up',
 };
 
 function loadState(): PersistedState {
@@ -48,8 +48,8 @@ function saveState(state: PersistedState) {
 }
 
 export const RawStateConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [gpioPullMode, setGpioPullModeState] = useState<PullMode>(defaultState.gpioPullMode);
-  const [shiftRegPullMode, setShiftRegPullModeState] = useState<PullMode>(defaultState.shiftRegPullMode);
+  const [gpioPullMode, setGpioPullModeState] = useState<PullMode>('pull-up');
+  const [shiftRegPullMode, setShiftRegPullModeState] = useState<PullMode>('pull-up');
 
   // Load on mount
   useEffect(() => {

@@ -7,6 +7,7 @@ import {
   type MatrixState, 
   type ShiftRegisterState 
 } from '@/lib/dev-config';
+import { useDisplayMode } from '@/contexts/DisplayModeContext';
 
 /**
  * Hook for reading raw hardware pin states from the connected device
@@ -17,34 +18,26 @@ export function useRawPinState() {
   const [matrixStates, setMatrixStates] = useState<MatrixState | null>(null);
   const [shiftRegStates, setShiftRegStates] = useState<ShiftRegisterState[]>([]);
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [displayMode, setDisplayMode] = useState<string>('hid');
   const [error, setError] = useState<string | null>(null);
+  
+  // Get display mode from context
+  const { displayMode } = useDisplayMode();
 
   // Track previous states for change detection
   const prevGpioStates = useRef<number>(0);
 
   useEffect(() => {
-    // Get display mode from backend
-    invoke<string>('get_raw_state_display_mode')
-      .then((mode: string) => {
-        setDisplayMode(mode);
-        
-        // Only start monitoring if we're in raw mode
-        if (mode === 'raw') {
-          startMonitoring();
-        }
-      })
-      .catch((err: any) => {
-        console.error('Failed to get display mode:', err);
-        setError(`Failed to get display mode: ${err}`);
-      });
+    // Start/stop monitoring based on display mode
+    if (displayMode === 'raw' || displayMode === 'both') {
+      startMonitoring();
+    } else {
+      stopMonitoring();
+    }
 
     return () => {
-      if (isMonitoring) {
-        stopMonitoring();
-      }
+      stopMonitoring();
     };
-  }, []);
+  }, [displayMode]);
 
   // Handle state changes and logging
   useEffect(() => {
@@ -228,7 +221,7 @@ export function useRawPinState() {
     // Status
     isMonitoring,
     displayMode,
-    isEnabled: displayMode === 'raw',
+    isEnabled: displayMode === 'raw' || displayMode === 'both',
     error,
     
     // Manual read functions

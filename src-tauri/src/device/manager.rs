@@ -171,8 +171,8 @@ impl DeviceManager {
         *app_handle_guard = Some(handle.clone());
         drop(app_handle_guard); // Release the lock before calling start_raw_state_monitoring
         
-        // If we're in Raw mode and have a connected device, start raw monitoring now
-        if matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+    // If we're in Raw mode or Both and have a connected device, start raw monitoring now
+    if matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both) {
             let connected_guard = self.connected_device.lock().await;
             if connected_guard.is_some() {
                 drop(connected_guard); // Release the lock before calling start_raw_state_monitoring
@@ -323,20 +323,19 @@ impl DeviceManager {
                                 log::debug!("Emitting Connected state after protocol stored");
                                 self.update_device_connection_state(device_id, ConnectionState::Connected).await;
 
-                                // Conditionally start monitoring based on display mode
-                                match crate::raw_state::DISPLAY_MODE {
-                                    crate::raw_state::DisplayMode::HID => {
-                                        let _ = self.connect_hid().await;
-                                        log::info!("Started HID monitoring (mode: HID)");
-                                    },
-                                    crate::raw_state::DisplayMode::Raw => {
-                                        if let Some(app_handle) = &*self.app_handle.lock().await {
-                                            let _ = self.start_raw_state_monitoring(app_handle.clone()).await;
-                                            log::info!("Started raw state monitoring (mode: Raw)");
-                                        } else {
-                                            log::info!("Raw monitoring mode active - will start when app handle is available");
-                                        }
-                                    },
+                                // Conditionally start monitoring based on display mode (Both starts both paths)
+                                let mode = crate::raw_state::get_display_mode();
+                                if matches!(mode, crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) {
+                                    let _ = self.connect_hid().await;
+                                    log::info!("Started HID monitoring (mode: {:?})", mode);
+                                }
+                                if matches!(mode, crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both) {
+                                    if let Some(app_handle) = &*self.app_handle.lock().await {
+                                        let _ = self.start_raw_state_monitoring(app_handle.clone()).await;
+                                        log::info!("Started raw state monitoring (mode: {:?})", mode);
+                                    } else {
+                                        log::info!("Raw monitoring mode active - will start when app handle is available");
+                                    }
                                 }
                                 log::info!("Successfully connected to device: {}", device.port_name);
                                 Ok(())
@@ -380,8 +379,8 @@ impl DeviceManager {
         };
 
         // Stop any active monitoring BEFORE tearing down protocol to avoid deadlocks on connected_device
-        match crate::raw_state::DISPLAY_MODE {
-            crate::raw_state::DisplayMode::Raw => {
+        match crate::raw_state::get_display_mode() {
+            crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both => {
                 if self.raw_monitoring_active.load(Ordering::Relaxed) {
                     log::debug!("Stopping raw monitoring prior to disconnect for device {}", device_id);
                     let _ = self.stop_raw_state_monitoring().await; // This acquires connected_device internally; safe because we are not holding it
@@ -411,7 +410,7 @@ impl DeviceManager {
         }
 
         // Now handle HID monitoring stop (after protocol disconnect so underlying interface closed)
-        if matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+    if matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) {
             let _ = self.disconnect_hid().await; // Ignore errors (non-fatal)
             log::info!("Disconnected HID monitoring");
         }
@@ -816,8 +815,8 @@ impl DeviceManager {
 
     /// Read button states from HID device
     pub async fn read_button_states(&self) -> Result<ButtonStates> {
-        // Check if we're in HID mode first
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+    // Check display mode allows HID (HID or Both)
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) {
             return Err(DeviceError::SerialError(
                 crate::serial::SerialError::ProtocolError("HID button states only available in HID mode".to_string())
             ));
@@ -864,7 +863,7 @@ impl DeviceManager {
 
     /// Debug helper: get selected HID offset and last raw value (if available)
     pub async fn hid_debug_mapping(&self) -> Option<(usize, u64)> {
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) {
             return None;
         }
         let hid_reader = self.hid_reader.lock().await;
@@ -873,7 +872,7 @@ impl DeviceManager {
 
     /// Debug helper: get last full HID report (len, hex)
     pub async fn hid_full_report(&self) -> Option<(usize, String)> {
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) {
             return None;
         }
         let hid_reader = self.hid_reader.lock().await;
@@ -882,7 +881,7 @@ impl DeviceManager {
 
     /// Detailed HID mapping info if supported by firmware
     pub async fn hid_mapping_details(&self) -> Option<serde_json::Value> {
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) {
             return None;
         }
         let hid_reader = self.hid_reader.lock().await;
@@ -891,7 +890,7 @@ impl DeviceManager {
 
     /// Diagnostic: raw vs logical button bits (first 16) for offset debugging
     pub async fn hid_button_bit_diagnostics(&self) -> Option<serde_json::Value> {
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::HID) {
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) {
             return None;
         }
         let hid_reader = self.hid_reader.lock().await;
@@ -899,7 +898,7 @@ impl DeviceManager {
     }
     
     /// Connect HID device (called automatically when connecting via serial)
-    async fn connect_hid(&self) -> Result<()> {
+    pub(crate) async fn connect_hid(&self) -> Result<()> {
         let hid_reader = self.hid_reader.lock().await;
         
         // Try to connect to HID device
@@ -917,7 +916,7 @@ impl DeviceManager {
     }
     
     /// Disconnect HID device (called automatically when disconnecting serial)
-    async fn disconnect_hid(&self) -> Result<()> {
+    pub(crate) async fn disconnect_hid(&self) -> Result<()> {
         let hid_reader = self.hid_reader.lock().await;
         
         match hid_reader.disconnect().await {
@@ -938,7 +937,7 @@ impl DeviceManager {
     /// Read raw GPIO states from connected device
     pub async fn read_raw_gpio_states(&self) -> Result<crate::raw_state::RawGpioStates> {
         // Check if we're in Raw mode first
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both) {
             return Err(DeviceError::SerialError(
                 crate::serial::SerialError::ProtocolError("Raw GPIO states only available in Raw mode".to_string())
             ));
@@ -958,7 +957,7 @@ impl DeviceManager {
     /// Read raw matrix states from connected device
     pub async fn read_raw_matrix_state(&self) -> Result<crate::raw_state::MatrixState> {
         // Check if we're in Raw mode first
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both) {
             return Err(DeviceError::SerialError(
                 crate::serial::SerialError::ProtocolError("Raw matrix states only available in Raw mode".to_string())
             ));
@@ -978,7 +977,7 @@ impl DeviceManager {
     /// Read raw shift register states from connected device
     pub async fn read_raw_shift_reg_state(&self) -> Result<Vec<crate::raw_state::ShiftRegisterState>> {
         // Check if we're in Raw mode first
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both) {
             return Err(DeviceError::SerialError(
                 crate::serial::SerialError::ProtocolError("Raw shift register states only available in Raw mode".to_string())
             ));
@@ -997,8 +996,8 @@ impl DeviceManager {
 
     /// Read all raw hardware states from connected device
     pub async fn read_all_raw_states(&self) -> Result<crate::raw_state::RawHardwareState> {
-        // Check if we're in Raw mode first
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+    // Check display mode allows Raw (Raw or Both)
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both) {
             return Err(DeviceError::SerialError(
                 crate::serial::SerialError::ProtocolError("Raw hardware states only available in Raw mode".to_string())
             ));
@@ -1017,8 +1016,8 @@ impl DeviceManager {
 
     /// Start raw state monitoring for connected device
     pub async fn start_raw_state_monitoring(&self, app_handle: tauri::AppHandle) -> Result<()> {
-        // Check if we're in Raw mode first
-        if !matches!(crate::raw_state::DISPLAY_MODE, crate::raw_state::DisplayMode::Raw) {
+    // Check display mode allows Raw (Raw or Both)
+    if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both) {
             return Err(DeviceError::SerialError(
                 crate::serial::SerialError::ProtocolError("Raw state monitoring only available in Raw mode".to_string())
             ));
@@ -1137,15 +1136,17 @@ impl Default for DeviceManager {
         Self::new()
     }
 }
-
-impl Drop for DeviceManager {
-    fn drop(&mut self) {
-        // Create a runtime to stop port monitor if needed
-        let rt = tokio::runtime::Runtime::new();
-        if let Ok(runtime) = rt {
-            let _ = runtime.block_on(async {
-                self.stop_port_monitor().await;
-            });
-        }
+impl DeviceManager {
+    /// Explicit asynchronous shutdown hook.
+    ///
+    /// This must be called before dropping the last `Arc<DeviceManager>`.
+    /// It performs cleanup that previously occurred in `Drop` but required
+    /// awaiting async tasks (stopping the port monitor). Performing that work
+    /// inside `Drop` forced creation of a new Tokio runtime which could panic
+    /// if `Drop` executed on an existing runtime worker thread ("Cannot start a runtime from within a runtime").
+    ///
+    /// Call this during application shutdown (e.g. in a Tauri on_exit handler).
+    pub async fn shutdown(&self) {
+        self.stop_port_monitor().await;
     }
 }

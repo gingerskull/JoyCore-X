@@ -9,12 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { ButtonStateBadge } from '@/components/ButtonStateBadge';
+import { NumberInput } from '@/components/ui/number-input';
+// Removed HID logical badges view; only raw hardware badges remain on left.
 import { useDeviceContext } from '@/contexts/DeviceContext';
+import { useDisplayMode } from '@/contexts/DisplayModeContext';
 
 // Raw state components
 import { useRawPinState } from '@/hooks/useRawPinState';
-import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
+// import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
 import { GpioPinBadge, MatrixConnectionBadge, ShiftRegBitBadge } from '@/components/RawStateBadge';
 import { RAW_STATE_CONFIG } from '@/lib/dev-config';
 
@@ -102,6 +104,25 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
   const [buttonStates, setButtonStates] = useState<Record<number, { enabled: boolean; function: string }>>({});
   // Local editable copy of buttons for add/delete operations
   const [editableButtons, setEditableButtons] = useState<ParsedButtonConfig[]>(parsedButtons);
+  
+  // Display mode control (force 'both' while this component is mounted so we always get HID + RAW data)
+  const { displayMode, setDisplayMode } = useDisplayMode();
+  const prevModeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevModeRef.current === null) {
+      prevModeRef.current = displayMode;
+    }
+    if (displayMode !== 'both') {
+      setDisplayMode('both');
+    }
+    return () => {
+      // Restore previous mode if user had something else before
+      if (prevModeRef.current && prevModeRef.current !== 'both') {
+        setDisplayMode(prevModeRef.current as 'hid' | 'raw' | 'both');
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync editable buttons when parsedButtons changes (e.g., device reload) unless user has local edits
   useEffect(() => {
@@ -125,7 +146,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
       firmwareButtonsRef.current = parsedButtons;
     }
   }, [parsedButtons]);
-  const [hidButtonStates, setHidButtonStates] = useState<ButtonStates | null>(null); // retains last full payload (timestamp)
+  // hidButtonStates removed (table highlight uses buttonMask only)
   const [buttonMask, setButtonMask] = useState<number>(0); // UI-rendered bitmask (throttled)
   const latestMaskRef = useRef<number>(0); // immediate latest from poller
   const displayedMaskRef = useRef<number>(0); // what's currently displayed in UI
@@ -135,10 +156,10 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
   const HOLD_VISIBILITY_MS = 50; // Show press for at least 50ms
   // Mapping details reserved for future advanced UI (currently unused after optimization)
   // Removed active usage to avoid unnecessary re-renders / lint warnings.
-  const [lastNonZeroButtons, setLastNonZeroButtons] = useState<number | null>(null);
+  // lastNonZeroButtons removed (no inactivity banner)
   // Track last log time to avoid spamming console which can add UI latency
   // const lastLogRef = useRef<number>(0); // Reserved for future use
-  const [noHidActivity, setNoHidActivity] = useState(false);
+  // HID inactivity banner removed; noHidActivity state removed
   const { isConnected: contextIsConnected } = useDeviceContext();
   
   // Use context connection state if not provided via props
@@ -146,7 +167,8 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
 
   // Raw hardware state hook
   const rawState = useRawPinState();
-  const { gpioPullMode, shiftRegPullMode } = useRawStateConfig();
+  // Pull modes retained only for potential future raw badge enhancements (not needed now)
+  // const { gpioPullMode, shiftRegPullMode } = useRawStateConfig();
   
   // Debug raw state (disabled to reduce console noise)
   useEffect(() => {
@@ -243,10 +265,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
 
   // Fetch HID mapping once per connection
   useEffect(() => {
-    if (!connected) {
-      setHidButtonStates(null);
-      return;
-    }
+  if (!connected) return;
     // Optionally could fetch mapping here in future.
   }, [connected]);
 
@@ -254,8 +273,8 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
   useEffect(() => {
     if (!connected) return;
     
-    // Only set up HID listeners if we're in HID mode
-    if (rawState.displayMode !== 'hid') return;
+    // Only set up HID listeners if we're in HID or both mode
+    if (rawState.displayMode !== 'hid' && rawState.displayMode !== 'both') return;
     
     let unlistenButton: (() => void) | null = null;
     let unlistenSync: (() => void) | null = null;
@@ -263,11 +282,10 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
     const setupEventListeners = async () => {
       // Get initial state
       try {
-        const states: ButtonStates = await invoke('read_button_states');
-        setHidButtonStates(states);
-        latestMaskRef.current = states.buttons;
-        displayedMaskRef.current = states.buttons;
-        setButtonMask(states.buttons);
+  const states: ButtonStates = await invoke('read_button_states');
+  latestMaskRef.current = states.buttons;
+  displayedMaskRef.current = states.buttons;
+  setButtonMask(states.buttons);
       } catch (e) {
         console.warn('Failed to get initial button states:', e);
       }
@@ -308,10 +326,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
         
         // Update UI if display mask changed
         if (displayMask !== displayedMaskRef.current) {
-          if (displayMask !== 0) {
-            lastActivityRef.current = now;
-            setLastNonZeroButtons(displayMask);
-          }
+          if (displayMask !== 0) { lastActivityRef.current = now; }
           
           // Schedule UI update on next frame
           if (!pendingFrameRef.current) {
@@ -333,8 +348,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
         // Debug: console.log(`[FRONTEND SYNC] State sync received: 0x${buttons.toString(16)} at ${timestamp}`);
         
         // Update state to match backend
-        latestMaskRef.current = buttons;
-        setHidButtonStates(event.payload);
+  latestMaskRef.current = buttons;
         
         // Apply hold visibility and update display if needed
         const now = performance.now();
@@ -385,27 +399,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
     return set;
   }, [buttonMask, parsedButtons]);
 
-  // Detect HID inactivity (no non-zero button states & timestamp not updating)
-  useEffect(() => {
-    if (!connected) {
-      setNoHidActivity(false);
-      return;
-    }
-    let timeout: number | undefined;
-    const check = () => {
-      if (hidButtonStates) {
-        const ageMs = Date.now() - new Date(hidButtonStates.timestamp).getTime();
-        if (lastNonZeroButtons === null && ageMs > 5000) { // 5s without any activity
-          setNoHidActivity(true);
-        } else if (lastNonZeroButtons !== null) {
-          setNoHidActivity(false);
-        }
-      }
-      timeout = window.setTimeout(check, 1000);
-    };
-    check();
-    return () => { if (timeout) window.clearTimeout(timeout); };
-  }, [connected, hidButtonStates, lastNonZeroButtons]);
+  // HID inactivity detection removed (UI no longer shows banner)
 
   // Pre-parse button names once (avoid regex per render for each cell) & group
   const groupedButtons = useMemo(() => {
@@ -454,46 +448,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
   // Helper to check if a button is pressed (uses memoized pressedSet)
   const isButtonPressed = useCallback((buttonId: number) => pressedSet.has(buttonId), [pressedSet]);
 
-  // Helper to get button badge state
-  const getButtonBadgeState = (button: ParsedButtonConfig): 'unconfigured' | 'configured' | 'pressed' | 'pressed-unconfigured' => {
-    const state = getButtonState(button);
-    const isPressed = isButtonPressed(button.id);
-    const hasLogicalButton = state.enabled && button.id >= 0;
-
-    if (isPressed) {
-      return hasLogicalButton ? 'pressed' : 'pressed-unconfigured';
-    } else {
-      return hasLogicalButton ? 'configured' : 'unconfigured';
-    }
-  };
-
-  // Determine if a physical input (parsed mapping) is presently active in RAW mode.
-  const isPhysicalActive = useCallback((info: ParsedButtonInfo): boolean => {
-    if (rawState.displayMode !== 'raw') return false;
-    // Direct GPIO: determine physical level then apply pull mode interpretation
-    if (info.type === 'direct' && info.index !== undefined && rawState.gpioStates !== null) {
-      const bitMask = 1 << info.index;
-      const physicalHigh = (rawState.gpioStates & bitMask) !== 0; // voltage level
-      const logicalActive = gpioPullMode === 'pull-up' ? !physicalHigh : physicalHigh;
-      return logicalActive;
-    }
-    // Matrix remains unchanged (connection closed = active)
-    if (info.type === 'matrix' && rawState.matrixStates) {
-      const conn = rawState.matrixStates.connections.find(c => c.row === info.row && c.col === info.col);
-      return !!conn?.is_connected;
-    }
-    // Shift register: physical bit then interpreted by pull mode
-    if (info.type === 'shiftreg' && info.register !== undefined && info.bit !== undefined) {
-      const reg = rawState.shiftRegStates.find(r => r.register_id === info.register);
-      if (reg) {
-        const bitMask = 1 << info.bit;
-        const physicalHigh = (reg.value & bitMask) !== 0; // bit=1 means HIGH
-        const logicalActive = shiftRegPullMode === 'pull-up' ? !physicalHigh : physicalHigh;
-        return logicalActive;
-      }
-    }
-    return false;
-  }, [rawState, gpioPullMode, shiftRegPullMode]);
+  // Removed HID badge state + physical active highlighting logic; table rows highlight only on HID logical press.
 
   if (!deviceStatus || !isConnected) {
     return (
@@ -549,114 +504,35 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
   return (
     <Card className="h-full">
       <CardHeader>
-        <CardTitle className="flex items-center">
-          <MousePointer className="w-5 h-5 mr-2" />
-          Button Configuration
-        </CardTitle>
-        <CardDescription>
-          Showing {parsedButtons.length} buttons from device configuration
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center">
+              <MousePointer className="w-5 h-5 mr-2" />
+              Button Configuration
+            </CardTitle>
+            <CardDescription>
+              Showing {parsedButtons.length} buttons from device configuration
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            Dual Monitoring (HID + RAW)
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
-        {noHidActivity && rawState.displayMode === 'hid' && (
-          <div className="mb-4 p-2 rounded border border-yellow-500/40 bg-yellow-500/10 text-xs text-yellow-600 dark:text-yellow-400">
-            No HID button activity detected yet. Press any physical button to confirm connection.
-          </div>
-        )}
+  {/* HID inactivity banner removed to keep left area purely raw hardware focus */}
         
         <div className="flex h-[600px] gap-4">
-          {/* Left half - monitoring visualization based on mode */}
+          {/* Left half - RAW hardware visualization only */}
           <div className="flex-1">
             <ScrollArea className="h-full" indicators fadeSize={56}>
               <div className="space-y-6 p-4">
-                {/* HID Button State Monitoring - Only show in HID mode */}
-                {rawState.displayMode === 'hid' && (
-                  <>
-                    {/* Direct Buttons */}
-                    {groupedButtons.direct.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-medium mb-3">Direct Buttons</h3>
-                        <div className="flex flex-wrap gap-2">
-                          {groupedButtons.direct.map(({ button, info }) => (
-                            <ButtonStateBadge
-                              key={button.id}
-                              label={info.label}
-                              state={getButtonBadgeState(button)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Matrix Buttons */}
-                    {groupedButtons.matrix.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-medium mb-3">Matrix Buttons ({matrixDimensions.rows}x{matrixDimensions.cols})</h3>
-                        <div 
-                          className="grid gap-2"
-                          style={{ 
-                            gridTemplateColumns: `repeat(${matrixDimensions.cols}, 20px)`,
-                            width: 'fit-content'
-                          }}
-                        >
-                          {Array.from({ length: matrixDimensions.rows * matrixDimensions.cols }, (_, index) => {
-                            const row = Math.floor(index / matrixDimensions.cols);
-                            const col = index % matrixDimensions.cols;
-                            const item = groupedButtons.matrix.find(
-                              m => m.info.row === row && m.info.col === col
-                            );
-                            
-                            if (item) {
-                              return (
-                                <ButtonStateBadge
-                                  key={item.button.id}
-                                  label={item.info.label}
-                                  state={getButtonBadgeState(item.button)}
-                                />
-                              );
-                            } else {
-                              // Empty cell
-                              return <div key={`empty-${row}-${col}`} className="w-5 h-5" />;
-                            }
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Shift Register Buttons */}
-                    {groupedButtons.shiftreg.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-medium mb-3">Shift Register Buttons</h3>
-                        <div className="space-y-2">
-                          {/* Group by register */}
-                          {Array.from(new Set(groupedButtons.shiftreg.map(s => s.info.register || 0))).map(register => {
-                            const registerButtons = groupedButtons.shiftreg.filter(
-                              s => s.info.register === register
-                            );
-                            return (
-                              <div key={`shiftreg-${register}`}>
-                                <div className="text-xs text-muted-foreground mb-1">Register {register}</div>
-                                <div className="flex flex-wrap gap-2">
-                                  {registerButtons.map(({ button, info }) => (
-                                    <ButtonStateBadge
-                                      key={button.id}
-                                      label={info.label}
-                                      state={getButtonBadgeState(button)}
-                                    />
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-                
-                {/* Raw Hardware State Monitoring - Badge Style */}
-                {rawState.displayMode === 'raw' && (
-                  <>
+                {/* Raw Hardware State Monitoring - always shown */}
+                <>
+                    <div className="mb-4">
+                      <h2 className="text-lg font-semibold">Raw Hardware States</h2>
+                      <p className="text-xs text-muted-foreground">Physical pin states directly from hardware</p>
+                    </div>
                     {rawState.error && (
                       <div className="mb-4 p-3 rounded border border-red-500/40 bg-red-500/10 text-red-600 text-sm">
                         {rawState.error}
@@ -776,14 +652,13 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                     )}
 
                     {/* Developer Controls (only show if enabled) */}
-                    {RAW_STATE_CONFIG.enableConsoleAPI && (
+          {RAW_STATE_CONFIG.enableConsoleAPI && (
                       <div className="mt-4 p-3 bg-gray-50 rounded border text-xs text-gray-600">
                         <p className="font-medium mb-1">Developer API Available:</p>
                         <p>Use <code className="bg-gray-200 px-1 rounded">window.__rawState</code> in browser console for debugging</p>
                       </div>
                     )}
-                  </>
-                )}
+        </>
               </div>
             </ScrollArea>
           </div>
@@ -809,14 +684,13 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                   const state = getButtonState(button);
                   // Parse physical mapping each render for editable list (may differ from firmware snapshot)
                   const physSegment = extractPhysicalSegment(button.name);
-                  const parsedInfo = physSegment ? parseButtonName(`Button ${button.id} ${physSegment}`) : null;
+                  // parsedInfo no longer needed for highlight logic
                   // Active criteria:
                   //  - In HID mode: logical button currently pressed
                   //  - In RAW mode: associated physical resource is active (heuristic per type)
-                  const logicalPressed = rawState.displayMode === 'hid' && isButtonPressed(button.id);
-                  const physicalActive = rawState.displayMode === 'raw' && parsedInfo ? isPhysicalActive(parsedInfo) : false;
-                  // Only highlight when the button is enabled; disabling a highlighted button removes highlight entirely.
-                  const highlight = state.enabled && (logicalPressed || physicalActive) && !!physSegment; // only highlight if mapping exists & enabled
+                  // Highlight only on HID logical press now (independent of displayMode since we force 'both')
+                  const logicalPressed = isButtonPressed(button.id);
+                  const highlight = state.enabled && logicalPressed && !!physSegment;
                   return (
                     <TableRow 
                       key={`row-${idx}-${button.id}`} 
@@ -834,11 +708,12 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                         />
                       </TableCell>
                       <TableCell className="p-2 flex items-center gap-2">
-                        <input
-                          type="number"
+                        <NumberInput
                           value={button.id}
-                          onChange={(e) => handleIdChange(button.id, parseInt(e.target.value,10))}
-                          className="w-14 border rounded px-1 py-0.5 text-xs font-mono bg-background"
+                          onChange={(value) => handleIdChange(button.id, value)}
+                          min={0}
+                          max={99}
+                          className="w-20 text-xs font-mono"
                         />
                         <button
                           type="button"
