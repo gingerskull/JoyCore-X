@@ -55,3 +55,16 @@ hex = "0.4"
 [features]
 default = []
 
+# Development profile tuning for better runtime performance closer to release
+[profile.dev]
+# Moderate optimization for local crate without making rebuilds too slow
+opt-level = 2
+# Keep debug info (can be reduced to 1 if compile time matters more)
+debug = true
+# Ensure incremental compilation stays enabled for faster successive builds
+incremental = true
+
+# Fully optimize dependencies (often bulk of CPU work) for realistic perf
+[profile.dev.package."*"]
+opt-level = 3
+

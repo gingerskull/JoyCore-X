@@ -567,7 +567,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
         <div className="flex h-[600px] gap-4">
           {/* Left half - monitoring visualization based on mode */}
           <div className="flex-1">
-            <ScrollArea className="h-full">
+            <ScrollArea className="h-full" indicators fadeSize={56}>
               <div className="space-y-6 p-4">
                 {/* HID Button State Monitoring - Only show in HID mode */}
                 {rawState.displayMode === 'hid' && (
@@ -793,17 +793,18 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
           
           {/* Right half - scrollable button list (always visible) */}
           <div className="flex-1">
-            <ScrollArea className="h-full">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40px]">On</TableHead>
-                    <TableHead className="w-[50px]">ID</TableHead>
-                    <TableHead>Physical Button</TableHead>
-                    <TableHead className="w-[120px]">Function</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            <ScrollArea className="h-full" indicators fadeSize={56}>
+              <div className="pr-4">{/* Padding to keep content from touching scrollbar */}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[40px]">On</TableHead>
+                      <TableHead className="w-[50px]">ID</TableHead>
+                      <TableHead>Physical Button</TableHead>
+                      <TableHead className="w-[120px]">Function</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                 {editableButtons.map((button, idx) => {
                   const state = getButtonState(button);
                   // Parse physical mapping each render for editable list (may differ from firmware snapshot)
@@ -814,7 +815,8 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                   //  - In RAW mode: associated physical resource is active (heuristic per type)
                   const logicalPressed = rawState.displayMode === 'hid' && isButtonPressed(button.id);
                   const physicalActive = rawState.displayMode === 'raw' && parsedInfo ? isPhysicalActive(parsedInfo) : false;
-                  const highlight = (logicalPressed || physicalActive) && !!physSegment; // only highlight if mapping exists
+                  // Only highlight when the button is enabled; disabling a highlighted button removes highlight entirely.
+                  const highlight = state.enabled && (logicalPressed || physicalActive) && !!physSegment; // only highlight if mapping exists & enabled
                   return (
                     <TableRow 
                       key={`row-${idx}-${button.id}`} 
@@ -901,16 +903,17 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                     </TableRow>
                   );
                 })}
-                </TableBody>
-              </Table>
-              <div className="p-2">
-                <button
-                  type="button"
-                  onClick={handleAddButton}
-                  className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90"
-                >
-                  Add Button
-                </button>
+                  </TableBody>
+                </Table>
+                <div className="p-2">
+                  <button
+                    type="button"
+                    onClick={handleAddButton}
+                    className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90"
+                  >
+                    Add Button
+                  </button>
+                </div>
               </div>
             </ScrollArea>
           </div>
