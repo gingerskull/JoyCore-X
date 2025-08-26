@@ -55,6 +55,12 @@
   --color-badge-purple-foreground: var(--badge-purple-foreground);
   --color-badge-teal: var(--badge-teal);
   --color-badge-teal-foreground: var(--badge-teal-foreground);
+  --color-badge-green: var(--badge-green);
+  --color-badge-green-foreground: var(--badge-green-foreground);
+  --color-badge-red: var(--badge-red);
+  --color-badge-red-foreground: var(--badge-red-foreground);
+  --color-badge-gray: var(--badge-gray);
+  --color-badge-gray-foreground: var(--badge-gray-foreground);
 }
 
 :root {
@@ -110,6 +116,13 @@
   --badge-purple-foreground: oklch(0.985 0 0);
   --badge-teal: oklch(0.696 0.17 162.48);
   --badge-teal-foreground: oklch(0.985 0 0);
+  /* Extended derived variants */
+  --badge-green: var(--success);
+  --badge-green-foreground: var(--success-foreground);
+  --badge-red: var(--destructive);
+  --badge-red-foreground: oklch(0.985 0 0);
+  --badge-gray: var(--muted);
+  --badge-gray-foreground: var(--muted-foreground);
 }
 
 .dark {
@@ -155,7 +168,7 @@
   
   /* Badge Color Variants */
   --badge-yellow: oklch(0.771 0.199 85.595);
-  --badge-yellow-foreground: oklch(0.145 0 0);
+  --badge-yellow-foreground: oklch(0.985 0 0);
   --badge-pink: oklch(0.647 0.281 10.217);
   --badge-pink-foreground: oklch(0.985 0 0);
   --badge-blue: oklch(0.618 0.193 231.029);
@@ -164,6 +177,12 @@
   --badge-purple-foreground: oklch(0.985 0 0);
   --badge-teal: oklch(0.696 0.17 162.48);
   --badge-teal-foreground: oklch(0.985 0 0);
+  --badge-green: var(--success);
+  --badge-green-foreground: var(--success-foreground);
+  --badge-red: var(--destructive);
+  --badge-red-foreground: oklch(0.985 0 0);
+  --badge-gray: var(--muted);
+  --badge-gray-foreground: var(--muted-foreground);
 }
 
 @layer base {
@@ -239,4 +258,86 @@
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 150ms;
   }
+  /* Unified Badge System */
+  .badge { @apply rounded font-mono font-bold select-none border text-[12px] flex items-center justify-center transition-colors duration-150; line-height:1; }
+  .badge[data-size="sm"] { @apply px-1.5 py-1 text-[10px]; }
+  .badge[data-size="md"] { @apply w-12 h-12; }
+  .badge[data-size="lg"] { @apply px-3 py-2 text-sm; }
+  .badge-yellow { background: var(--badge-yellow); color: var(--badge-yellow-foreground); border-color: color-mix(in oklab, var(--badge-yellow) 60%, black); }
+  .badge-pink { background: var(--badge-pink); color: var(--badge-pink-foreground); border-color: color-mix(in oklab, var(--badge-pink) 60%, black); }
+  .badge-blue { background: var(--badge-blue); color: var(--badge-blue-foreground); border-color: color-mix(in oklab, var(--badge-blue) 60%, black); }
+  .badge-purple { background: var(--badge-purple); color: var(--badge-purple-foreground); border-color: color-mix(in oklab, var(--badge-purple) 60%, black); }
+  .badge-teal { background: var(--badge-teal); color: var(--badge-teal-foreground); border-color: color-mix(in oklab, var(--badge-teal) 60%, black); }
+  .badge-green { background: var(--badge-green); color: var(--badge-green-foreground); border-color: color-mix(in oklab, var(--badge-green) 60%, black); }
+  .badge-red { background: var(--badge-red); color: var(--badge-red-foreground); border-color: color-mix(in oklab, var(--badge-red) 60%, black); }
+  .badge-gray { background: var(--badge-gray); color: var(--badge-gray-foreground); border-color: color-mix(in oklab, var(--badge-gray) 60%, black); }
+  .badge-inactive { opacity: .6; }
+  .badge-pressed { box-shadow: 0 0 0 2px color-mix(in oklab, var(--badge-red) 60%, transparent), 0 0 0 4px color-mix(in oklab, var(--badge-red) 30%, transparent); }
+  
+  /* Pin Function Dropdown Full-Row Variants */
+  .pin-func-item { @apply w-full rounded-sm px-2 py-1.5 text-xs font-mono font-semibold flex items-center gap-2 transition-colors cursor-pointer select-none; }
+  .pin-func-blue { background: var(--badge-blue); color: var(--badge-blue-foreground); }
+  .pin-func-purple { background: var(--badge-purple); color: var(--badge-purple-foreground); }
+  .pin-func-teal { background: var(--badge-teal); color: var(--badge-teal-foreground); }
+  .pin-func-yellow { background: var(--badge-yellow); color: var(--badge-yellow-foreground); }
+  .pin-func-red { background: var(--badge-red); color: var(--badge-red-foreground); }
+  .pin-func-pink { background: var(--badge-pink); color: var(--badge-pink-foreground); }
+  .pin-func-green { background: var(--badge-green); color: var(--badge-green-foreground); }
+  .pin-func-gray { background: var(--badge-gray); color: var(--badge-gray-foreground); }
+  /* Ensure trigger gets full background when variant class applied */
+  [data-slot='select-trigger'].pin-func-blue { background: var(--badge-blue) !important; color: var(--badge-blue-foreground) !important; }
+  [data-slot='select-trigger'].pin-func-purple { background: var(--badge-purple) !important; color: var(--badge-purple-foreground) !important; }
+  [data-slot='select-trigger'].pin-func-teal { background: var(--badge-teal) !important; color: var(--badge-teal-foreground) !important; }
+  [data-slot='select-trigger'].pin-func-yellow { background: var(--badge-yellow) !important; color: var(--badge-yellow-foreground) !important; }
+  [data-slot='select-trigger'].pin-func-red { background: var(--badge-red) !important; color: var(--badge-red-foreground) !important; }
+  [data-slot='select-trigger'].pin-func-pink { background: var(--badge-pink) !important; color: var(--badge-pink-foreground) !important; }
+  [data-slot='select-trigger'].pin-func-green { background: var(--badge-green) !important; color: var(--badge-green-foreground) !important; }
+  [data-slot='select-trigger'].pin-func-gray { background: var(--badge-gray) !important; color: var(--badge-gray-foreground) !important; }
+  /* Ensure the chevron icon contrasts on colored background */
+  [data-slot='select-trigger'].pin-func-blue svg,
+  [data-slot='select-trigger'].pin-func-purple svg,
+  [data-slot='select-trigger'].pin-func-teal svg,
+  [data-slot='select-trigger'].pin-func-yellow svg,
+  [data-slot='select-trigger'].pin-func-red svg,
+  [data-slot='select-trigger'].pin-func-pink svg,
+  [data-slot='select-trigger'].pin-func-green svg,
+  [data-slot='select-trigger'].pin-func-gray svg { color: currentColor; opacity: .7; }
+  /* Reset default transparent/bg-input from trigger styling */
+  [data-slot='select-trigger'].pin-func-blue:hover,
+  [data-slot='select-trigger'].pin-func-purple:hover,
+  [data-slot='select-trigger'].pin-func-teal:hover,
+  [data-slot='select-trigger'].pin-func-yellow:hover,
+  [data-slot='select-trigger'].pin-func-red:hover,
+  [data-slot='select-trigger'].pin-func-pink:hover,
+  [data-slot='select-trigger'].pin-func-green:hover,
+  [data-slot='select-trigger'].pin-func-gray:hover { filter: brightness(0.95); }
+  .dark [data-slot='select-trigger'].pin-func-blue:hover,
+  .dark [data-slot='select-trigger'].pin-func-purple:hover,
+  .dark [data-slot='select-trigger'].pin-func-teal:hover,
+  .dark [data-slot='select-trigger'].pin-func-yellow:hover,
+  .dark [data-slot='select-trigger'].pin-func-red:hover,
+  .dark [data-slot='select-trigger'].pin-func-pink:hover,
+  .dark [data-slot='select-trigger'].pin-func-green:hover,
+  .dark [data-slot='select-trigger'].pin-func-gray:hover { filter: brightness(1.05); }
+  /* Hover: muted translucent overlay of same color */
+  .pin-func-blue:hover { background: color-mix(in oklab, var(--badge-blue) 65%, black); }
+  .pin-func-purple:hover { background: color-mix(in oklab, var(--badge-purple) 65%, black); }
+  .pin-func-teal:hover { background: color-mix(in oklab, var(--badge-teal) 65%, black); }
+  .pin-func-yellow:hover { background: color-mix(in oklab, var(--badge-yellow) 70%, black); }
+  .pin-func-red:hover { background: color-mix(in oklab, var(--badge-red) 65%, black); }
+  .pin-func-pink:hover { background: color-mix(in oklab, var(--badge-pink) 65%, black); }
+  .pin-func-green:hover { background: color-mix(in oklab, var(--badge-green) 65%, black); }
+  .pin-func-gray:hover { background: color-mix(in oklab, var(--badge-gray) 65%, black); }
+  .dark .pin-func-blue:hover { background: color-mix(in oklab, var(--badge-blue) 80%, white); }
+  .dark .pin-func-purple:hover { background: color-mix(in oklab, var(--badge-purple) 80%, white); }
+  .dark .pin-func-teal:hover { background: color-mix(in oklab, var(--badge-teal) 80%, white); }
+  .dark .pin-func-yellow:hover { background: color-mix(in oklab, var(--badge-yellow) 85%, white); }
+  .dark .pin-func-red:hover { background: color-mix(in oklab, var(--badge-red) 80%, white); }
+  .dark .pin-func-pink:hover { background: color-mix(in oklab, var(--badge-pink) 80%, white); }
+  .dark .pin-func-green:hover { background: color-mix(in oklab, var(--badge-green) 80%, white); }
+  .dark .pin-func-gray:hover { background: color-mix(in oklab, var(--badge-gray) 80%, white); }
+  /* Remove outline on selected; maintain same background */
+  .pin-func-item[data-state="checked"] { box-shadow: inset 0 0 0 1px color-mix(in oklab, currentColor 40%, transparent); }
+  /* Checkmark color consistency */
+  .pin-func-item[data-state="checked"] svg { color: currentColor; opacity: .7; }
 }

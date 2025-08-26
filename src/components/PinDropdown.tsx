@@ -6,7 +6,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import type { PinFunction, PinConfiguration } from '@/lib/types';
 
 interface PinDropdownProps {
@@ -20,9 +19,7 @@ export function PinDropdown({ pinConfig, onFunctionChange, size = 'xs' }: PinDro
 
   if (!isConfigurable) {
     return (
-      <Badge variant="secondary" className="font-mono">
-        {pinConfig.defaultLabel}
-      </Badge>
+      <span className="pin-func-item pin-func-gray w-24 text-center">{pinConfig.defaultLabel}</span>
     );
   }
 
@@ -117,35 +114,44 @@ export function PinDropdown({ pinConfig, onFunctionChange, size = 'xs' }: PinDro
     }
   };
 
-  const getFunctionBadgeVariant = (func: PinFunction): "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "info" | "yellow" | "pink" | "blue" | "purple" | "teal" => {
-    if (func === 'PIN_UNUSED') return 'secondary';
+  const getFunctionVariant = (func: PinFunction): string => {
+    if (func === 'PIN_UNUSED') return 'gray';
     if (func.startsWith('BTN')) return 'blue';
     if (func.startsWith('SHIFTREG')) return 'purple';
     if (func === 'ANALOG_AXIS') return 'teal';
-    if (func.startsWith('SPI')) return 'outline';
-    if (func.startsWith('I2C')) return 'destructive';
+    if (func.startsWith('SPI')) return 'yellow';
+    if (func.startsWith('I2C')) return 'red';
     if (func.startsWith('UART')) return 'yellow';
     if (func.startsWith('PWM')) return 'pink';
-    return 'default';
+    return 'gray';
   };
 
   return (
     <Select value={currentFunction} onValueChange={handleValueChange}>
-      <SelectTrigger size={size} className="w-36">
-        <SelectValue>
-          <Badge variant={getFunctionBadgeVariant(currentFunction)} className="font-mono text-xs">
-            {getFunctionDisplayName(currentFunction)}
-          </Badge>
-        </SelectValue>
-      </SelectTrigger>
+      {(() => {
+        const triggerVariant = getFunctionVariant(currentFunction);
+        return (
+          <SelectTrigger
+            size={size}
+            className={`w-36 pin-func-${triggerVariant} font-mono font-semibold text-xs border-transparent focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-offset-0`}
+          >
+            <SelectValue>{getFunctionDisplayName(currentFunction)}</SelectValue>
+          </SelectTrigger>
+        );
+      })()}
       <SelectContent>
-        {availableFunctions.map((func) => (
-          <SelectItem key={func} value={func}>
-            <Badge variant={getFunctionBadgeVariant(func)} className="font-mono text-xs">
+        {availableFunctions.map((func) => {
+          const variant = getFunctionVariant(func);
+          return (
+            <SelectItem
+              key={func}
+              value={func}
+              className={`pin-func-item pin-func-${variant}`}
+            >
               {getFunctionDisplayName(func)}
-            </Badge>
-          </SelectItem>
-        ))}
+            </SelectItem>
+          );
+        })}
       </SelectContent>
     </Select>
   );

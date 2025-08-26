@@ -237,9 +237,9 @@ export function PinoutConfiguration({ devicePinAssignments }: PinoutConfiguratio
               <div className="space-y-2">
                 <Badge variant="yellow" className="font-semibold">Communication</Badge>
                 <div className="space-y-1 text-xs">
-                  <div><Badge variant="secondary" className="mr-2">SPI</Badge>Serial Peripheral Interface</div>
-                  <div><Badge variant="destructive" className="mr-2">I2C</Badge>Inter-Integrated Circuit</div>
-                  <div><Badge variant="warning" className="mr-2">UART</Badge>Serial communication</div>
+                  <div><Badge variant="yellow" className="mr-2">SPI</Badge>Serial Peripheral Interface</div>
+                  <div><Badge variant="red" className="mr-2">I2C</Badge>Inter-Integrated Circuit</div>
+                  <div><Badge variant="yellow" className="mr-2">UART</Badge>Serial communication</div>
                   <div><Badge variant="pink" className="mr-2">PWM</Badge>Pulse Width Modulation</div>
                 </div>
               </div>

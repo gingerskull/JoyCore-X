@@ -33,6 +33,12 @@ const badgeVariants = cva(
           "border-transparent bg-badge-purple text-badge-purple-foreground [a&]:hover:bg-badge-purple/90",
         teal:
           "border-transparent bg-badge-teal text-badge-teal-foreground [a&]:hover:bg-badge-teal/90",
+        green:
+          "border-transparent bg-badge-green text-badge-green-foreground [a&]:hover:bg-badge-green/90",
+        red:
+          "border-transparent bg-badge-red text-badge-red-foreground [a&]:hover:bg-badge-red/90",
+        gray:
+          "border-transparent bg-badge-gray text-badge-gray-foreground [a&]:hover:bg-badge-gray/90",
       },
     },
     defaultVariants: {

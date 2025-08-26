@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { Badge } from './Badge';
+import type { BadgeVariant } from './Badge';
 import { RAW_STATE_CONFIG } from '@/lib/dev-config';
 import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
 
@@ -31,34 +33,30 @@ export function RawStateBadge({ mode, state, label, tooltip, className }: RawSta
     }
   }, [state]);
 
-  // Color schemes for different modes
-  const colorSchemes = {
-    gpio: {
-      active: "bg-green-500 text-white border border-green-400",
-      inactive: "bg-gray-600 text-white border border-gray-500"
-    },
-    matrix: {
-      active: "bg-green-500 text-white border border-green-400",
-      inactive: "bg-gray-600 text-white border border-gray-500"
-    },
-    shiftreg: {
-      active: "bg-blue-500 text-white border border-blue-400",
-      inactive: "bg-gray-600 text-white border border-gray-500"
+  // Map mode/state to variants
+  const resolveVariant = (): { variant: BadgeVariant; inactive?: boolean } => {
+    const activeVariant: Record<RawStateBadgeMode, BadgeVariant> = {
+      gpio: 'green',
+      matrix: 'green',
+      shiftreg: 'blue'
+    };
+    if (state === 'inactive') {
+      return { variant: 'gray', inactive: true };
     }
+    return { variant: activeVariant[mode] };
   };
+  const { variant, inactive } = resolveVariant();
 
   return (
-    <div
-      className={cn(
-        "w-12 h-12 rounded flex items-center justify-center text-[12px] font-mono font-bold transition-colors duration-50 select-none",
-        colorSchemes[mode][state],
-        isChanging && "",
-        className
-      )}
+    <Badge
+      size="md"
+      variant={variant}
+      inactive={inactive}
+      className={cn(isChanging && '', className)}
       title={tooltip}
     >
       {label}
-    </div>
+    </Badge>
   );
 }
 
