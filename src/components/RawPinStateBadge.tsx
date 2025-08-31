@@ -14,7 +14,7 @@ interface RawPinStateBadgeProps {
 
 /**
  * Visual indicator for raw GPIO pin state
- * Shows HIGH (3.3V) in green, LOW (0V) in gray
+ * Shows HIGH (3.3V) in success (green), LOW (0V) in muted/gray
  * Includes change highlighting animation
  */
 export function RawPinStateBadge({ 
@@ -48,9 +48,12 @@ export function RawPinStateBadge({
   return (
     <Badge
       size="lg"
-      variant={logicalActive ? 'green' : 'gray'}
-      inactive={!logicalActive}
-      className={cn('raw-pin-badge min-w-[80px] shadow-sm', isChanging && 'ring-2 ring-badge-yellow animate-pulse scale-105', className)}
+      variant={logicalActive ? 'success' : 'gray'}
+      className={cn(
+        'raw-pin-badge min-w-[80px] shadow-sm transition-transform',
+        isChanging && 'ring-2 ring-brand-4/70 animate-pulse scale-105',
+        className
+      )}
       title={`GPIO ${gpio}: Physical ${state ? 'HIGH (3.3V)' : 'LOW (0V)'} | Logical ${logicalActive ? 'ACTIVE' : 'inactive'} (${gpioPullMode})`}
     >
       <div className="flex flex-col items-center gap-1">

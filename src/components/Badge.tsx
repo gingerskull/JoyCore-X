@@ -1,32 +1,46 @@
+import * as React from 'react';
+import { Badge as UIBadge } from '@/components/ui/badge';
+import type { BadgeVariantProp } from '@/components/ui/badge-variants';
 import { cn } from '@/lib/utils';
-import React from 'react';
 
-export type BadgeVariant = 'yellow' | 'pink' | 'blue' | 'purple' | 'teal' | 'green' | 'red' | 'gray' |'success';
-export type BadgeSize = 'sm' | 'md' | 'lg';
+// Supported variants after legacy purge
+const variantMap: Record<string, BadgeVariantProp> = {
+  default: 'default',
+  primary: 'default', // still allow "primary"
+  secondary: 'secondary',
+  destructive: 'destructive',
+  success: 'success',
+  warning: 'warning',
+  info: 'info',
+  muted: 'muted',
+  brand1: 'brand1',
+  brand2: 'brand2',
+  brand3: 'brand3',
+  brand4: 'brand4',
+  brand5: 'brand5'
+};
 
-interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: BadgeVariant;
-  size?: BadgeSize;
-  inactive?: boolean;
-  pressed?: boolean;
-  children: React.ReactNode;
-  className?: string;
+export interface BadgeProps extends Omit<React.ComponentProps<typeof UIBadge>, 'variant'> {
+  variant?: keyof typeof variantMap;
+  size?: 'sm' | 'md' | 'lg';
 }
 
-export function Badge({ variant = 'gray', size = 'md', inactive, pressed, children, className, ...rest }: BadgeProps) {
+export function Badge({ variant = 'default', size = 'md', className, ...rest }: BadgeProps) {
+  const mapped: BadgeVariantProp = variantMap[variant] ?? 'default';
+  const sizeClasses =
+    size === 'sm'
+      ? 'h-5 px-1.5 text-[10px]'
+      : size === 'lg'
+      ? 'h-8 px-3 text-sm'
+      : 'h-6 px-2'; // md
+
   return (
-    <div
-      data-size={size}
-      className={cn(
-        'badge',
-        `badge-${variant}`,
-        inactive && 'badge-inactive',
-        pressed && 'badge-pressed',
-        className
-      )}
+    <UIBadge
+      variant={mapped}
+      className={cn(sizeClasses, className)}
       {...rest}
-    >
-      {children}
-    </div>
+    />
   );
 }
+
+export default Badge;

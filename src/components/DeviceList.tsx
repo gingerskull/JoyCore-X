@@ -157,7 +157,7 @@ export function DeviceList({ onCollapse, deviceCount, onRefresh, isLoading: isRe
               <Download className={`w-4 h-4 mr-2 ${isCheckingUpdates ? 'animate-pulse' : ''}`} />
               {hasUpdateAvailable ? 'Update Available' : 'Check Updates'}
               {hasUpdateAvailable && (
-                <Badge variant="yellow" className="ml-2">
+                <Badge variant="brand4" className="ml-2">
                   {latestVersion}
                 </Badge>
               )}

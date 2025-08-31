@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { PinFunction, PinConfiguration } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface PinDropdownProps {
   pinConfig: PinConfiguration;
@@ -14,12 +15,25 @@ interface PinDropdownProps {
   size?: 'xs' | 'default';
 }
 
+// Map pin function categories to brand/status color utility classes
+function functionColor(func: PinFunction): string {
+  if (func === 'PIN_UNUSED') return 'bg-muted text-muted-foreground';
+  if (func.startsWith('BTN')) return 'bg-brand-1 text-brand-1-foreground';
+  if (func.startsWith('SHIFTREG')) return 'bg-brand-2 text-brand-2-foreground';
+  if (func === 'ANALOG_AXIS') return 'bg-brand-3 text-brand-3-foreground';
+  if (func.startsWith('SPI')) return 'bg-brand-4 text-brand-4-foreground';
+  if (func.startsWith('I2C')) return 'bg-destructive text-destructive-foreground';
+  if (func.startsWith('UART')) return 'bg-brand-4 text-brand-4-foreground';
+  if (func.startsWith('PWM')) return 'bg-brand-5 text-brand-5-foreground';
+  return 'bg-muted text-muted-foreground';
+}
+
 export function PinDropdown({ pinConfig, onFunctionChange, size = 'xs' }: PinDropdownProps) {
   const { pinNumber, currentFunction, availableFunctions, isConfigurable } = pinConfig;
 
   if (!isConfigurable) {
     return (
-      <span className="pin-func-item pin-func-gray w-24 text-center">{pinConfig.defaultLabel}</span>
+      <span className={cn('w-24 text-center rounded-sm px-2 py-1.5 text-xs font-mono font-semibold', functionColor('PIN_UNUSED'))}>{pinConfig.defaultLabel}</span>
     );
   }
 
@@ -114,26 +128,14 @@ export function PinDropdown({ pinConfig, onFunctionChange, size = 'xs' }: PinDro
     }
   };
 
-  const getFunctionVariant = (func: PinFunction): string => {
-    if (func === 'PIN_UNUSED') return 'gray';
-    if (func.startsWith('BTN')) return 'blue';
-    if (func.startsWith('SHIFTREG')) return 'purple';
-    if (func === 'ANALOG_AXIS') return 'teal';
-    if (func.startsWith('SPI')) return 'yellow';
-    if (func.startsWith('I2C')) return 'red';
-    if (func.startsWith('UART')) return 'yellow';
-    if (func.startsWith('PWM')) return 'pink';
-    return 'gray';
-  };
-
   return (
     <Select value={currentFunction} onValueChange={handleValueChange}>
       {(() => {
-        const triggerVariant = getFunctionVariant(currentFunction);
+        const triggerClasses = functionColor(currentFunction);
         return (
           <SelectTrigger
             size={size}
-            className={`w-36 pin-func-${triggerVariant} font-mono font-semibold text-xs border-transparent focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-offset-0`}
+            className={cn('w-36 font-mono font-semibold text-xs border-transparent focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-offset-0', triggerClasses)}
           >
             <SelectValue>{getFunctionDisplayName(currentFunction)}</SelectValue>
           </SelectTrigger>
@@ -141,12 +143,12 @@ export function PinDropdown({ pinConfig, onFunctionChange, size = 'xs' }: PinDro
       })()}
       <SelectContent>
         {availableFunctions.map((func) => {
-          const variant = getFunctionVariant(func);
+          const itemClasses = functionColor(func);
           return (
             <SelectItem
               key={func}
               value={func}
-              className={`pin-func-item pin-func-${variant}`}
+              className={cn('rounded-sm px-2 py-1.5 text-xs font-mono font-semibold flex items-center gap-2 cursor-pointer select-none', itemClasses)}
             >
               {getFunctionDisplayName(func)}
             </SelectItem>
