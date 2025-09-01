@@ -228,7 +228,7 @@ export function Sidebar({ collapsed, onRefresh, isRefreshing, parsedAxes, parsed
               <>
                 {hasUpdateAvailable ? 'Update Available' : 'Check Updates'}
                 {hasUpdateAvailable && (
-                  <Badge variant="yellow" className="ml-2">{latestVersion}</Badge>
+                  <Badge variant="brand4" className="ml-2">{latestVersion}</Badge>
                 )}
               </>
             )}

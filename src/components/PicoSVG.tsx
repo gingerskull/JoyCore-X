@@ -102,11 +102,11 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
                       size="xs"
                     />
                     {pinConfig.gpioNumber !== undefined && (
-                      <Badge variant="blue" className="font-mono min-w-[2.5rem] text-center">
+                      <Badge variant="brand3" className="font-mono min-w-[2.5rem] text-center">
                         GP{pinConfig.gpioNumber}
                       </Badge>
                     )}
-                    <Badge variant="info" className="font-mono min-w-[2rem] text-center">
+                    <Badge variant="success" className="font-mono min-w-[2rem] text-center">
                       {pin}
                     </Badge>
                   </>
@@ -138,11 +138,11 @@ export function PicoSVG({ pinConfigurations, onPinFunctionChange }: PicoSVGProps
               <div className="flex items-center space-x-2">
                 {isConfigurable ? (
                   <>
-                    <Badge variant="info" className="font-mono min-w-[2rem] text-center">
+                    <Badge variant="success" className="font-mono min-w-[2rem] text-center">
                       {pin}
                     </Badge>
                     {pinConfig.gpioNumber !== undefined && (
-                      <Badge variant="blue" className="font-mono min-w-[2.5rem] text-center">
+                      <Badge variant="brand3" className="font-mono min-w-[2.5rem] text-center">
                         GP{pinConfig.gpioNumber}
                       </Badge>
                     )}

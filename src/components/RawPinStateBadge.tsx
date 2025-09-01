@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { Badge } from './Badge';
 import { RAW_STATE_CONFIG } from '@/lib/dev-config';
 import { useRawStateConfig } from '@/contexts/RawStateConfigContext';
 
@@ -13,7 +14,7 @@ interface RawPinStateBadgeProps {
 
 /**
  * Visual indicator for raw GPIO pin state
- * Shows HIGH (3.3V) in green, LOW (0V) in gray
+ * Shows HIGH (3.3V) in success (green), LOW (0V) in muted/gray
  * Includes change highlighting animation
  */
 export function RawPinStateBadge({ 
@@ -45,16 +46,12 @@ export function RawPinStateBadge({
   const logicalActive = gpioPullMode === 'pull-up' ? !state : state;
 
   return (
-    <div 
+    <Badge
+      size="lg"
+      variant={logicalActive ? 'success' : 'gray'}
       className={cn(
-        "raw-pin-badge",
-        "px-3 py-2 rounded-md text-sm font-medium",
-        "transition-all duration-200 min-w-[80px] text-center",
-        "border shadow-sm",
-        logicalActive 
-          ? "bg-green-500 text-white border-green-600" 
-          : "bg-gray-200 text-gray-700 border-gray-300",
-        isChanging && "ring-2 ring-yellow-400 animate-pulse scale-105",
+        'raw-pin-badge min-w-[80px] shadow-sm transition-transform',
+        isChanging && 'ring-2 ring-brand-4/70 animate-pulse scale-105',
         className
       )}
       title={`GPIO ${gpio}: Physical ${state ? 'HIGH (3.3V)' : 'LOW (0V)'} | Logical ${logicalActive ? 'ACTIVE' : 'inactive'} (${gpioPullMode})`}
@@ -82,7 +79,7 @@ export function RawPinStateBadge({
           )}
         </div>
       </div>
-    </div>
+    </Badge>
   );
 }
 

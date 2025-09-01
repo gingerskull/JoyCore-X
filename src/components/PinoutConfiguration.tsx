@@ -213,7 +213,7 @@ export function PinoutConfiguration({ devicePinAssignments }: PinoutConfiguratio
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div className="space-y-2">
-                <Badge variant="blue" className="font-semibold">Button Functions</Badge>
+                <Badge variant="brand1" className="font-semibold">Button Functions</Badge>
                 <div className="space-y-1 text-xs">
                   <div>BTN - Single button input</div>
                   <div>BTN_ROW - Button matrix row</div>
@@ -221,7 +221,7 @@ export function PinoutConfiguration({ devicePinAssignments }: PinoutConfiguratio
                 </div>
               </div>
               <div className="space-y-2">
-                <Badge variant="purple" className="font-semibold">Shift Register</Badge>
+                <Badge variant="brand2" className="font-semibold">Shift Register</Badge>
                 <div className="space-y-1 text-xs">
                   <div>SHIFTREG_PL - Parallel load</div>
                   <div>SHIFTREG_CLK - Clock</div>
@@ -229,18 +229,18 @@ export function PinoutConfiguration({ devicePinAssignments }: PinoutConfiguratio
                 </div>
               </div>
               <div className="space-y-2">
-                <Badge variant="teal" className="font-semibold">Analog</Badge>
+                <Badge variant="brand3" className="font-semibold">Analog</Badge>
                 <div className="space-y-1 text-xs">
                   <div>ANALOG_AXIS - Analog axis input</div>
                 </div>
               </div>
               <div className="space-y-2">
-                <Badge variant="yellow" className="font-semibold">Communication</Badge>
+                <Badge variant="brand4" className="font-semibold">Communication</Badge>
                 <div className="space-y-1 text-xs">
-                  <div><Badge variant="secondary" className="mr-2">SPI</Badge>Serial Peripheral Interface</div>
+                  <div><Badge variant="brand4" className="mr-2">SPI</Badge>Serial Peripheral Interface</div>
                   <div><Badge variant="destructive" className="mr-2">I2C</Badge>Inter-Integrated Circuit</div>
-                  <div><Badge variant="warning" className="mr-2">UART</Badge>Serial communication</div>
-                  <div><Badge variant="pink" className="mr-2">PWM</Badge>Pulse Width Modulation</div>
+                  <div><Badge variant="brand4" className="mr-2">UART</Badge>Serial communication</div>
+                  <div><Badge variant="brand5" className="mr-2">PWM</Badge>Pulse Width Modulation</div>
                 </div>
               </div>
             </div>

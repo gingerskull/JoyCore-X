@@ -6,8 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import type { PinFunction, PinConfiguration } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface PinDropdownProps {
   pinConfig: PinConfiguration;
@@ -15,14 +15,25 @@ interface PinDropdownProps {
   size?: 'xs' | 'default';
 }
 
+// Map pin function categories to brand/status color utility classes
+function functionColor(func: PinFunction): string {
+  if (func === 'PIN_UNUSED') return 'bg-muted text-muted-foreground';
+  if (func.startsWith('BTN')) return 'bg-brand-1 text-brand-1-foreground';
+  if (func.startsWith('SHIFTREG')) return 'bg-brand-2 text-brand-2-foreground';
+  if (func === 'ANALOG_AXIS') return 'bg-brand-3 text-brand-3-foreground';
+  if (func.startsWith('SPI')) return 'bg-brand-4 text-brand-4-foreground';
+  if (func.startsWith('I2C')) return 'bg-destructive text-destructive-foreground';
+  if (func.startsWith('UART')) return 'bg-brand-4 text-brand-4-foreground';
+  if (func.startsWith('PWM')) return 'bg-brand-5 text-brand-5-foreground';
+  return 'bg-muted text-muted-foreground';
+}
+
 export function PinDropdown({ pinConfig, onFunctionChange, size = 'xs' }: PinDropdownProps) {
   const { pinNumber, currentFunction, availableFunctions, isConfigurable } = pinConfig;
 
   if (!isConfigurable) {
     return (
-      <Badge variant="secondary" className="font-mono">
-        {pinConfig.defaultLabel}
-      </Badge>
+      <span className={cn('w-24 text-center rounded-sm px-2 py-1.5 text-xs font-mono font-semibold', functionColor('PIN_UNUSED'))}>{pinConfig.defaultLabel}</span>
     );
   }
 
@@ -117,35 +128,32 @@ export function PinDropdown({ pinConfig, onFunctionChange, size = 'xs' }: PinDro
     }
   };
 
-  const getFunctionBadgeVariant = (func: PinFunction): "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "info" | "yellow" | "pink" | "blue" | "purple" | "teal" => {
-    if (func === 'PIN_UNUSED') return 'secondary';
-    if (func.startsWith('BTN')) return 'blue';
-    if (func.startsWith('SHIFTREG')) return 'purple';
-    if (func === 'ANALOG_AXIS') return 'teal';
-    if (func.startsWith('SPI')) return 'outline';
-    if (func.startsWith('I2C')) return 'destructive';
-    if (func.startsWith('UART')) return 'yellow';
-    if (func.startsWith('PWM')) return 'pink';
-    return 'default';
-  };
-
   return (
     <Select value={currentFunction} onValueChange={handleValueChange}>
-      <SelectTrigger size={size} className="w-36">
-        <SelectValue>
-          <Badge variant={getFunctionBadgeVariant(currentFunction)} className="font-mono text-xs">
-            {getFunctionDisplayName(currentFunction)}
-          </Badge>
-        </SelectValue>
-      </SelectTrigger>
+      {(() => {
+        const triggerClasses = functionColor(currentFunction);
+        return (
+          <SelectTrigger
+            size={size}
+            className={cn('w-36 font-mono font-semibold text-xs border-transparent focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-offset-0', triggerClasses)}
+          >
+            <SelectValue>{getFunctionDisplayName(currentFunction)}</SelectValue>
+          </SelectTrigger>
+        );
+      })()}
       <SelectContent>
-        {availableFunctions.map((func) => (
-          <SelectItem key={func} value={func}>
-            <Badge variant={getFunctionBadgeVariant(func)} className="font-mono text-xs">
+        {availableFunctions.map((func) => {
+          const itemClasses = functionColor(func);
+          return (
+            <SelectItem
+              key={func}
+              value={func}
+              className={cn('rounded-sm px-2 py-1.5 text-xs font-mono font-semibold flex items-center gap-2 cursor-pointer select-none', itemClasses)}
+            >
               {getFunctionDisplayName(func)}
-            </Badge>
-          </SelectItem>
-        ))}
+            </SelectItem>
+          );
+        })}
       </SelectContent>
     </Select>
   );

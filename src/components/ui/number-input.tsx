@@ -14,8 +14,9 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
   ({ className, value, onChange, min, max, step = 1, disabled, ...props }, ref) => {
     const [internalValue, setInternalValue] = React.useState(value ?? 0)
     const [isHolding, setIsHolding] = React.useState<'increment' | 'decrement' | null>(null)
-    const holdIntervalRef = React.useRef<NodeJS.Timeout>()
-    const holdTimeoutRef = React.useRef<NodeJS.Timeout>()
+  // Refs need explicit initial value for strict TS; allow null until timers created
+  const holdIntervalRef = React.useRef<NodeJS.Timeout | null>(null)
+  const holdTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
 
     // Use internal value if no value prop provided (uncontrolled mode)
     const currentValue = value !== undefined ? value : internalValue
@@ -54,15 +55,15 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 
     const stopHold = () => {
       setIsHolding(null)
-      if (holdTimeoutRef.current) clearTimeout(holdTimeoutRef.current)
-      if (holdIntervalRef.current) clearInterval(holdIntervalRef.current)
+  if (holdTimeoutRef.current) clearTimeout(holdTimeoutRef.current)
+  if (holdIntervalRef.current) clearInterval(holdIntervalRef.current)
     }
 
     // Clean up on unmount
     React.useEffect(() => {
       return () => {
-        if (holdTimeoutRef.current) clearTimeout(holdTimeoutRef.current)
-        if (holdIntervalRef.current) clearInterval(holdIntervalRef.current)
+  if (holdTimeoutRef.current) clearTimeout(holdTimeoutRef.current)
+  if (holdIntervalRef.current) clearInterval(holdIntervalRef.current)
       }
     }, [])
 

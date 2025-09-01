@@ -4,166 +4,97 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Tailwind v4 token bridge (minimal). Edit core vars below in :root. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
-  --color-badge-yellow: var(--badge-yellow);
-  --color-badge-yellow-foreground: var(--badge-yellow-foreground);
-  --color-badge-pink: var(--badge-pink);
-  --color-badge-pink-foreground: var(--badge-pink-foreground);
-  --color-badge-blue: var(--badge-blue);
-  --color-badge-blue-foreground: var(--badge-blue-foreground);
-  --color-badge-purple: var(--badge-purple);
-  --color-badge-purple-foreground: var(--badge-purple-foreground);
-  --color-badge-teal: var(--badge-teal);
-  --color-badge-teal-foreground: var(--badge-teal-foreground);
+  /* Five brand colors (generic palette) */
+  --color-brand-1: var(--brand-1);
+  --color-brand-1-foreground: var(--brand-1-foreground);
+  --color-brand-2: var(--brand-2);
+  --color-brand-2-foreground: var(--brand-2-foreground);
+  --color-brand-3: var(--brand-3);
+  --color-brand-3-foreground: var(--brand-3-foreground);
+  --color-brand-4: var(--brand-4);
+  --color-brand-4-foreground: var(--brand-4-foreground);
+  --color-brand-5: var(--brand-5);
+  --color-brand-5-foreground: var(--brand-5-foreground);
 }
 
 :root {
+  /* Single-mode (dark) baseline. Edit these to change theme. */
   --radius: 0.25rem;
-  --background: oklch(0.08 0 0);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.12 0 0);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.14 0 0);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.618 0.193 231.029);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.18 0 0);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.25 0 0);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(1 0 0 / 15%);
-  --input: oklch(1 0 0 / 20%);
-  --ring: oklch(0.618 0.193 231.029);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.1 0 0);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.618 0.193 231.029);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.2 0 0);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(1 0 0 / 15%);
-  --sidebar-ring: oklch(0.618 0.193 231.029);
 
-  /* HOTAS Dashboard Custom Variables */
-  --success: oklch(0.593 0.211 150.267);
-  --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.771 0.199 85.595);
-  --warning-foreground: oklch(0.145 0 0);
-  --info: oklch(0.618 0.193 231.029);
-  --info-foreground: oklch(0.985 0 0);
-  
-  /* Badge Color Variants */
-  --badge-yellow: oklch(0.771 0.199 85.595);
-  --badge-yellow-foreground: oklch(0.145 0 0);
-  --badge-pink: oklch(0.647 0.281 10.217);
-  --badge-pink-foreground: oklch(0.985 0 0);
-  --badge-blue: oklch(0.618 0.193 231.029);
-  --badge-blue-foreground: oklch(0.985 0 0);
-  --badge-purple: oklch(0.627 0.265 303.9);
-  --badge-purple-foreground: oklch(0.985 0 0);
-  --badge-teal: oklch(0.696 0.17 162.48);
-  --badge-teal-foreground: oklch(0.985 0 0);
-}
-
-.dark {
+  /* Core surfaces */
   --background: #191b1d;
   --foreground: oklch(0.95 0 0);
   --card: #202427;
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.14 0 0);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: #3a4246;
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.18 0 0);
-  --secondary-foreground: oklch(0.95 0 0);
+  --card-foreground: var(--foreground);
+  --popover: #202427;
+  --popover-foreground: var(--foreground);
+
+  /* Neutrals & borders */
   --muted: oklch(0.22 0 0);
   --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.25 0 0);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(1 0 0 / 15%);
   --input: oklch(1 0 0 / 20%);
   --ring: oklch(0.618 0.193 231.029);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: #191b1d;
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.618 0.193 231.029);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.2 0 0);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(1 0 0 / 15%);
-  --sidebar-ring: oklch(0.618 0.193 231.029);
 
-  /* HOTAS Dashboard Dark Theme */
+  /* Semantic actions */
+  --primary: #3a4246; /* subdued primary */
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.18 0 0);
+  --secondary-foreground: var(--foreground);
+  --accent: oklch(0.25 0 0);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  /* Status */
   --success: oklch(0.593 0.211 150.267);
   --success-foreground: oklch(0.985 0 0);
   --warning: oklch(0.771 0.199 85.595);
   --warning-foreground: oklch(0.145 0 0);
   --info: oklch(0.618 0.193 231.029);
   --info-foreground: oklch(0.985 0 0);
-  
-  /* Badge Color Variants */
-  --badge-yellow: oklch(0.771 0.199 85.595);
-  --badge-yellow-foreground: oklch(0.145 0 0);
-  --badge-pink: oklch(0.647 0.281 10.217);
-  --badge-pink-foreground: oklch(0.985 0 0);
-  --badge-blue: oklch(0.618 0.193 231.029);
-  --badge-blue-foreground: oklch(0.985 0 0);
-  --badge-purple: oklch(0.627 0.265 303.9);
-  --badge-purple-foreground: oklch(0.985 0 0);
-  --badge-teal: oklch(0.696 0.17 162.48);
-  --badge-teal-foreground: oklch(0.985 0 0);
+
+  /* Five brand palette (edit these for global accent diversity) */
+  --brand-1: oklch(0.618 0.193 231.029); /* blue */
+  --brand-1-foreground: oklch(0.985 0 0);
+  --brand-2: oklch(0.627 0.265 303.9);  /* purple */
+  --brand-2-foreground: oklch(0.985 0 0);
+  --brand-3: oklch(0.696 0.17 162.48);  /* teal */
+  --brand-3-foreground: oklch(0.985 0 0);
+  --brand-4: oklch(0.771 0.199 85.595); /* yellow */
+  --brand-4-foreground: oklch(0.145 0 0);
+  --brand-5: oklch(0.647 0.281 10.217); /* pink */
+  --brand-5-foreground: oklch(0.985 0 0);
+
+  /* Edit brand-1..brand-5 above to change the five accent colors used across the app.
+     These feed button/badge variants and functional color coding. Keep contrast by updating
+     the matching --brand-X-foreground if you adjust the base color. */
 }
 
 @layer base {
