@@ -67,6 +67,72 @@ impl DeviceManager {
         }
     }
 
+    /// Attempt to fetch HID mapping via serial commands and inject into HID reader if missing.
+    async fn try_serial_mapping_fallback(&self, unified_handle: crate::serial::unified::UnifiedSerialHandle) -> Result<Option<bool>> {
+        use crate::serial::unified::types::{CommandSpec, ResponseMatcher};
+        use std::time::Duration;
+        // Check if display mode allows HID
+        if !matches!(crate::raw_state::get_display_mode(), crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) { return Ok(None); }
+        // Quick check if mapping already present
+        {
+            let hid_reader = self.hid_reader.lock().await;
+            if hid_reader.mapping_details().await.is_some() { return Ok(Some(false)); }
+        }
+        // Issue HID_MAPPING_INFO
+    let mapping_info_spec = CommandSpec { name: "HID_MAPPING_INFO", timeout: Duration::from_millis(800), matcher: ResponseMatcher::UntilPrefix("HID_MAPPING_INFO:"), test_min_duration_ms: None };
+        let mapping_resp = match unified_handle.send_command("HID_MAPPING_INFO".to_string(), mapping_info_spec).await {
+            Ok(r) => r.lines.join("\n"),
+            Err(e) => { log::debug!("HID_MAPPING_INFO command unavailable: {}", e); return Ok(None); }
+        };
+        if !mapping_resp.starts_with("HID_MAPPING_INFO:") { return Ok(None); }
+        // Parse key=value pairs after prefix
+        let data_part = mapping_resp.splitn(2, ':').nth(1).unwrap_or("");
+        let mut proto_ver: u8 = 0; let mut report_id: u8 = 0; let mut btn_cnt: u16 = 0; let mut axis_cnt: u16 = 0; let mut btn_off: u8 = 0; let mut bit_order: u8 = 0; let mut crc: u16 = 0; let mut fc_off: Option<u8> = None;
+        for kv in data_part.split(',') { if let Some((k,v)) = kv.split_once('=') { match k { "ver"=> proto_ver = v.parse().unwrap_or(0), "rid"=> report_id = v.parse().unwrap_or(0), "btn"=> btn_cnt = v.parse().unwrap_or(0), "axis"=> axis_cnt = v.parse().unwrap_or(0), "btn_offset"=> btn_off = v.parse().unwrap_or(0), "bit_order"=> bit_order = v.parse().unwrap_or(0), "crc"=> { crc = u16::from_str_radix(v.trim_start_matches("0x"),16).unwrap_or(0); }, "fc_offset"=> fc_off = Some(v.parse().unwrap_or(0)), _=>{} } } }
+        if btn_cnt == 0 { return Ok(None); }
+        // Always attempt to fetch explicit mapping table; fall back to identity if SEQUENTIAL or unavailable
+        let mut mapping: Vec<u8> = (0..btn_cnt.min(128) as u8).collect(); // identity by default
+        let map_spec = CommandSpec { name: "HID_BUTTON_MAP", timeout: Duration::from_millis(800), matcher: ResponseMatcher::UntilPrefix("HID_BUTTON_MAP"), test_min_duration_ms: None };
+        match unified_handle.send_command("HID_BUTTON_MAP".to_string(), map_spec).await {
+            Ok(r) => {
+                let resp = r.lines.join("\n");
+                if resp.trim() == "HID_BUTTON_MAP:SEQUENTIAL" {
+                    // keep identity
+                } else if let Some(rest) = resp.strip_prefix("HID_BUTTON_MAP:") {
+                    let parsed: Vec<u8> = rest.split(',').filter_map(|n| n.parse::<u8>().ok()).collect();
+                    if parsed.is_empty() {
+                        if crc != 0 { log::warn!("HID_BUTTON_MAP empty but CRC indicates custom mapping; retaining identity"); }
+                    } else {
+                        // If length mismatches, clamp/fill to button count
+                        if parsed.len() != btn_cnt as usize { log::warn!("HID_BUTTON_MAP length {} != button_count {}; clamping", parsed.len(), btn_cnt); }
+                        mapping = (0..btn_cnt.min(128) as u8).map(|i| parsed.get(i as usize).copied().unwrap_or(i)).collect();
+                    }
+                } else {
+                    if crc != 0 { log::warn!("Unexpected HID_BUTTON_MAP response '{}'; retaining identity", resp.trim()); }
+                }
+            }
+            Err(e) => {
+                if crc != 0 { log::warn!("HID_BUTTON_MAP unavailable ({}); retaining identity", e); }
+            }
+        }
+        // Inject mapping
+        let injected = {
+            let hid_reader = self.hid_reader.lock().await;
+            let ext_info = crate::hid::ExternalMappingInfo {
+                protocol_version: proto_ver,
+                input_report_id: report_id,
+                button_count: btn_cnt,
+                axis_count: axis_cnt,
+                button_byte_offset: btn_off,
+                button_bit_order: bit_order,
+                mapping_crc: crc,
+                frame_counter_offset: fc_off,
+            };
+            hid_reader.apply_external_mapping(ext_info, mapping, false)
+        };
+        Ok(Some(injected))
+    }
+
     /// Start the port monitor for event-driven device discovery
     async fn start_port_monitor(&self) {
         let mut monitor = create_port_monitor();
@@ -328,6 +394,13 @@ impl DeviceManager {
                                 if matches!(mode, crate::raw_state::DisplayMode::HID | crate::raw_state::DisplayMode::Both) {
                                     let _ = self.connect_hid().await;
                                     log::info!("Started HID monitoring (mode: {:?})", mode);
+                                    // Attempt serial mapping fallback if HID mapping not present yet
+                                    match self.try_serial_mapping_fallback(handle.clone()).await {
+                                        Ok(Some(true)) => log::info!("Serial mapping fallback applied successfully"),
+                                        Ok(Some(false)) => {},
+                                        Ok(None) => {},
+                                        Err(e) => log::warn!("Serial mapping fallback error: {:?}", e),
+                                    }
                                 }
                                 if matches!(mode, crate::raw_state::DisplayMode::Raw | crate::raw_state::DisplayMode::Both) {
                                     if let Some(app_handle) = &*self.app_handle.lock().await {

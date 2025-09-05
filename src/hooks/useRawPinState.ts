@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { 
@@ -23,58 +23,73 @@ export function useRawPinState() {
   // Get display mode from context
   const { displayMode } = useDisplayMode();
 
-  // Track previous states for change detection
+  // Track previous states for change detection (event-level gating)
   const prevGpioStates = useRef<number>(0);
+  const prevMatrixSigRef = useRef<string>("");
+  const shiftRegMapRef = useRef<Map<number, ShiftRegisterState>>(new Map());
 
-  useEffect(() => {
-    // Start/stop monitoring based on display mode
-    if (displayMode === 'raw' || displayMode === 'both') {
-      startMonitoring();
-    } else {
-      stopMonitoring();
-    }
-
-    return () => {
-      stopMonitoring();
+  // Typed window helpers to avoid `any` usage
+  type CleanupFns = {
+    unsubscribeGpio: () => void;
+    unsubscribeMatrix: () => void;
+    unsubscribeShift: () => void;
+  };
+  type WindowWithRawState = Window & {
+    __rawStateCleanup?: CleanupFns;
+    __rawState?: {
+      states: { gpioStates: number; matrixStates: MatrixState | null; shiftRegStates: ShiftRegisterState[] };
+      controls: {
+        start: () => Promise<void> | void;
+        stop: () => Promise<void> | void;
+        readGpio: () => Promise<RawGpioStates>;
+        readMatrix: () => Promise<MatrixState>;
+        readShiftReg: () => Promise<ShiftRegisterState[]>;
+        readAll: () => Promise<unknown>;
+      };
+      config: typeof RAW_STATE_CONFIG;
     };
-  }, [displayMode]);
+  };
 
-  // Handle state changes and logging
-  useEffect(() => {
-    if (RAW_STATE_CONFIG.logStateChanges && gpioStates !== prevGpioStates.current) {
-      console.log('GPIO states changed:', {
-        previous: `0x${prevGpioStates.current.toString(16).padStart(8, '0')}`,
-        current: `0x${gpioStates.toString(16).padStart(8, '0')}`,
-        changed: gpioStates ^ prevGpioStates.current,
-      });
-      prevGpioStates.current = gpioStates;
-    }
-  }, [gpioStates]);
-
-  const startMonitoring = async () => {
+  const startMonitoring = useCallback(async () => {
     try {
       setError(null);
       
       // Subscribe to events first
       let lastGpioLog = 0;
       const unsubscribeGpio = await listen<RawGpioStates>('raw-gpio-changed', (event) => {
-        setGpioStates(event.payload.gpio_mask);
+        const newMask = event.payload.gpio_mask;
+        if (newMask === prevGpioStates.current) {
+          // No actual change; skip state update and log
+          return;
+        }
+        prevGpioStates.current = newMask;
+        setGpioStates(newMask);
         if (RAW_STATE_CONFIG.enableRawEventLogging) {
           const now = performance.now();
-            const delta = lastGpioLog === 0 ? 0 : (now - lastGpioLog);
-            lastGpioLog = now;
-            // Using console.debug to reduce noise; switch to log if needed
-            console.debug('[RAW_EVT][GPIO]', {
-              t_ms: now.toFixed(3),
-              delta_ms: delta.toFixed(3),
-              mask_hex: '0x' + event.payload.gpio_mask.toString(16).padStart(8,'0')
-            });
+          const delta = lastGpioLog === 0 ? 0 : (now - lastGpioLog);
+          lastGpioLog = now;
+          // Using console.debug to reduce noise; switch to log if needed
+          console.debug('[RAW_EVT][GPIO]', {
+            t_ms: now.toFixed(3),
+            delta_ms: delta.toFixed(3),
+            mask_hex: '0x' + newMask.toString(16).padStart(8,'0')
+          });
         }
       });
 
       let lastMatrixLog = 0;
-      const unsubscribeMatrix = await listen<MatrixState>('raw-matrix-changed', (event) => {
-        setMatrixStates(event.payload);
+    const unsubscribeMatrix = await listen<MatrixState>('raw-matrix-changed', (event) => {
+        const payload = event.payload;
+        // Build a stable signature of connections to detect actual change
+        const sig = payload.connections
+      .map(c => `${c.row},${c.col}:${c.is_connected ? 1 : 0}`)
+          .sort()
+          .join('|');
+        if (sig === prevMatrixSigRef.current) {
+          return; // no change
+        }
+        prevMatrixSigRef.current = sig;
+        setMatrixStates(payload);
         if (RAW_STATE_CONFIG.enableRawEventLogging) {
           const now = performance.now();
           const delta = lastMatrixLog === 0 ? 0 : (now - lastMatrixLog);
@@ -82,25 +97,30 @@ export function useRawPinState() {
           console.debug('[RAW_EVT][MATRIX]', {
             t_ms: now.toFixed(3),
             delta_ms: delta.toFixed(3),
-            connections: event.payload.connections.length
+            connections: payload.connections.length
           });
         }
       });
 
       let lastShiftLog = 0;
       const unsubscribeShift = await listen<ShiftRegisterState[]>('raw-shift-changed', (event) => {
-        // Merge incremental shift register updates (backend emits one register per event)
-        setShiftRegStates(prev => {
-          if (!event.payload || event.payload.length === 0) return prev;
-          // Build map of existing states
-          const map = new Map<number, ShiftRegisterState>();
-          for (const r of prev) map.set(r.register_id, r);
-          // Apply updates
-            for (const upd of event.payload) {
-              map.set(upd.register_id, upd);
-            }
-          return Array.from(map.values()).sort((a,b)=>a.register_id - b.register_id);
-        });
+        const updates = event.payload;
+        if (!updates || updates.length === 0) return;
+        // Compare against cached full map to detect actual changes
+        const map = new Map(shiftRegMapRef.current);
+        let changed = false;
+        for (const upd of updates) {
+          const prevVal = map.get(upd.register_id);
+          if (!prevVal || prevVal.value !== upd.value) {
+            map.set(upd.register_id, upd);
+            changed = true;
+          }
+        }
+        if (!changed) { return; }
+        shiftRegMapRef.current = map;
+        const nextArray: ShiftRegisterState[] = Array.from(map.values())
+          .sort((a, b) => a.register_id - b.register_id);
+        setShiftRegStates(nextArray);
         if (RAW_STATE_CONFIG.enableRawEventLogging) {
           const now = performance.now();
           const delta = lastShiftLog === 0 ? 0 : (now - lastShiftLog);
@@ -108,7 +128,7 @@ export function useRawPinState() {
           console.debug('[RAW_EVT][SHIFT]', {
             t_ms: now.toFixed(3),
             delta_ms: delta.toFixed(3),
-            registers: event.payload.map(r => ({ id: r.register_id, value: '0x'+r.value.toString(16).padStart(2,'0')}))
+            registers: updates.map(r => ({ id: r.register_id, value: '0x'+r.value.toString(16).padStart(2,'0')}))
           });
         }
       });
@@ -125,7 +145,7 @@ export function useRawPinState() {
 
       // Store unsubscribe functions for cleanup
       // Note: In a real implementation, you'd want to properly manage these
-      (window as any).__rawStateCleanup = {
+  (window as unknown as WindowWithRawState).__rawStateCleanup = {
         unsubscribeGpio,
         unsubscribeMatrix,
         unsubscribeShift,
@@ -135,32 +155,57 @@ export function useRawPinState() {
       console.error('Failed to start monitoring:', err);
       setError(`Failed to start monitoring: ${err}`);
     }
-  };
+  }, []);
 
-  const stopMonitoring = async () => {
+  const stopMonitoring = useCallback(async () => {
     try {
       // Stop firmware monitoring
       await invoke('stop_raw_state_monitoring');
       setIsMonitoring(false);
 
       // Clean up event listeners
-      const cleanup = (window as any).__rawStateCleanup;
+      const cleanup = (window as unknown as WindowWithRawState).__rawStateCleanup;
       if (cleanup) {
         cleanup.unsubscribeGpio();
         cleanup.unsubscribeMatrix();
         cleanup.unsubscribeShift();
-        delete (window as any).__rawStateCleanup;
+        delete (window as unknown as WindowWithRawState).__rawStateCleanup;
       }
     } catch (err) {
       console.error('Failed to stop monitoring:', err);
       setError(`Failed to stop monitoring: ${err}`);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Start/stop monitoring based on display mode
+    if (displayMode === 'raw' || displayMode === 'both') {
+      startMonitoring();
+    } else {
+      stopMonitoring();
+    }
+
+    return () => {
+      stopMonitoring();
+    };
+  }, [displayMode, startMonitoring, stopMonitoring]);
+
+  // Handle state changes and logging (component-level; keep quiet if event handler already gated)
+  useEffect(() => {
+    if (RAW_STATE_CONFIG.logStateChanges && gpioStates !== prevGpioStates.current) {
+      console.log('GPIO states changed:', {
+        previous: `0x${prevGpioStates.current.toString(16).padStart(8, '0')}`,
+        current: `0x${gpioStates.toString(16).padStart(8, '0')}`,
+        changed: gpioStates ^ prevGpioStates.current,
+      });
+      prevGpioStates.current = gpioStates;
+    }
+  }, [gpioStates]);
 
   // Expose debug API if enabled
   useEffect(() => {
     if (RAW_STATE_CONFIG.enableConsoleAPI) {
-      (window as any).__rawState = {
+      (window as unknown as WindowWithRawState).__rawState = {
         states: { gpioStates, matrixStates, shiftRegStates },
         controls: {
           start: startMonitoring,
@@ -176,10 +221,10 @@ export function useRawPinState() {
 
     return () => {
       if (RAW_STATE_CONFIG.enableConsoleAPI) {
-        delete (window as any).__rawState;
+        delete (window as unknown as WindowWithRawState).__rawState;
       }
     };
-  }, [gpioStates, matrixStates, shiftRegStates, isMonitoring]);
+  }, [gpioStates, matrixStates, shiftRegStates, isMonitoring, startMonitoring, stopMonitoring]);
 
   // Manual read functions for one-shot reads
   const readGpioStates = async (): Promise<RawGpioStates | null> => {

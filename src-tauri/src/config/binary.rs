@@ -443,15 +443,14 @@ impl BinaryConfig {
         for (i, logical_input) in self.logical_inputs.iter().enumerate() {
             log::info!("Logical input {}: type={}, behavior={}, data={:?}", 
                 i, logical_input.input_type, logical_input.behavior, logical_input.data);
-                
+
             if logical_input.input_type == 0 { // INPUT_PIN type
-                let pin_data = u16::from_le_bytes(logical_input.data);
-                log::info!("INPUT_PIN found: pin_data={}", pin_data);
-                
-                if pin_data <= 255 { // Valid GPIO pin range
-                    let gpio_pin = pin_data as u8;
-                    
-                    // Only add if not already assigned from pin map
+                // Firmware format: data[0] = GPIO pin, data[1] = flags / reserved (NOT part of pin number)
+                let gpio_pin = logical_input.data[0];
+                let flags = logical_input.data[1];
+                log::info!("INPUT_PIN found: gpio_pin={} flags=0x{:02X}", gpio_pin, flags);
+
+                if gpio_pin <= 29 { // RP2040 valid GPIO range 0-29
                     if !pin_assignments.contains_key(&gpio_pin) {
                         log::info!("Adding pin assignment from logical input: GPIO {} -> BTN", gpio_pin);
                         pin_assignments.insert(gpio_pin, "BTN".to_string());
@@ -459,12 +458,12 @@ impl BinaryConfig {
                         log::info!("GPIO {} already assigned from pin map, skipping logical input", gpio_pin);
                     }
                 } else {
-                    log::warn!("Pin data {} exceeds valid GPIO range", pin_data);
+                    log::warn!("GPIO {} out of valid range (0-29) in logical input; ignoring", gpio_pin);
                 }
             } else if logical_input.input_type == 1 { // INPUT_MATRIX
                 log::info!("Skipping INPUT_MATRIX (type 1) - doesn't map to single GPIO pins");
             } else if logical_input.input_type == 2 { // INPUT_SHIFTREG
-                log::info!("Skipping INPUT_SHIFTREG (type 2) - shift register control pins handled by pin map");
+                log::info!("Skipping INPUT_SHIFTREG (type 2) - shift register bits map via shift register chain, physical control pins provided in pin map");
             } else {
                 log::info!("Unknown logical input type: {}", logical_input.input_type);
             }

@@ -113,6 +113,19 @@ struct MappingData {
     mapping: Vec<u8>,
 }
 
+/// Public friendly struct for external mapping injection (e.g., from serial protocol)
+#[derive(Debug, Clone)]
+pub struct ExternalMappingInfo {
+    pub protocol_version: u8,
+    pub input_report_id: u8,
+    pub button_count: u16,
+    pub axis_count: u16,
+    pub button_byte_offset: u8,
+    pub button_bit_order: u8,
+    pub mapping_crc: u16,
+    pub frame_counter_offset: Option<u8>,
+}
+
 impl HidReader {
     /// Create a new HID reader
     pub fn new() -> Result<Self> {
@@ -137,6 +150,29 @@ impl HidReader {
         if let Ok(mut app_handle) = self.app_handle.lock() {
             *app_handle = Some(handle);
         }
+    }
+
+    /// Inject mapping information obtained via an alternate path (e.g., serial fallback)
+    /// This will override any existing mapping only if none currently loaded or force_replace=true.
+    pub fn apply_external_mapping(&self, info: ExternalMappingInfo, mapping: Vec<u8>, force_replace: bool) -> bool {
+        // Build HIDMappingInfoRaw equivalent from external struct
+        let raw = HIDMappingInfoRaw {
+            protocol_version: info.protocol_version,
+            input_report_id: info.input_report_id,
+            button_count: info.button_count.min(128) as u8,
+            axis_count: info.axis_count.min(32) as u8,
+            button_byte_offset: info.button_byte_offset,
+            button_bit_order: info.button_bit_order,
+            mapping_crc: info.mapping_crc,
+            frame_counter_offset: info.frame_counter_offset.unwrap_or(0xFF), // 0xFF meaning unknown
+            reserved: [0u8;7],
+        };
+
+        let mut guard = self.mapping_data.lock().unwrap();
+        if guard.is_some() && !force_replace { return false; }
+        *guard = Some(MappingData { info: raw, mapping });
+        log::info!("External mapping injected: buttons={} axes={} sequential={} source=serial-fallback", raw.button_count, raw.axis_count, raw.mapping_crc==0);
+        true
     }
     
     /// Connect to the JoyCore HID device
@@ -190,15 +226,31 @@ impl HidReader {
                     let mut buf = [0u8; 1 + size_of::<HIDMappingInfoRaw>()];
                     buf[0] = 3;
                     if let Ok(sz) = dev.get_feature_report(&mut buf) { if sz == buf.len() { // looks promising
-                        // Store immediately
+                        // Store device so mapping fetch can use it
                         {
                             let mut device_guard = self.device.lock().await; *device_guard = Some(dev);
                         }
                         // Parse mapping
                         if self.try_fetch_mapping().await.is_ok() {
-                            log::info!("Selected JoyCore HID interface {} (mapping feature supported) path={}", interface, path);
-                            self.start_reader_task(*interface).await?;
-                            return Ok(());
+                            // Quick sanity check: ensure this interface yields input reports
+                            let mut probe_ok = false;
+                            {
+                                let guard = self.device.lock().await;
+                                if let Some(device) = guard.as_ref() {
+                                    let mut rbuf = [0u8; 64];
+                                    for _ in 0..6 {
+                                        if let Ok(rs) = device.read_timeout(&mut rbuf, 40) { if rs > 0 { probe_ok = true; break; } }
+                                    }
+                                }
+                            }
+                            if probe_ok {
+                                log::info!("Selected JoyCore HID interface {} (mapping feature supported) path={}", interface, path);
+                                self.start_reader_task(*interface).await?;
+                                return Ok(());
+                            } else {
+                                log::warn!("Interface {} had mapping but produced no input reports; trying next", interface);
+                                let mut device_guard = self.device.lock().await; *device_guard = None;
+                            }
                         } else {
                             // Clear device again to retry in pass 2
                             let mut device_guard = self.device.lock().await; *device_guard = None;
@@ -405,16 +457,24 @@ impl HidReader {
 
         if raw.protocol_version == 0 || raw.button_count == 0 || raw.button_count > 128 { return Err(HidError::InvalidData); }
 
-        // Fetch custom mapping if mapping_crc != 0x0000
-        let mapping: Vec<u8> = if raw.mapping_crc == 0 { // sequential
-            (0..raw.button_count).collect()
-        } else {
+        // Prefer explicit mapping report (ID 4) if available; otherwise fall back to identity
+        let mut mapping: Vec<u8> = (0..raw.button_count).collect();
+        {
             let mut map_buf = vec![0u8; 1 + raw.button_count as usize];
             map_buf[0] = 4; // feature report ID 4
-            let sz2 = dev.get_feature_report(&mut map_buf)?;
-            if sz2 < map_buf.len() { return Err(HidError::InvalidData); }
-            map_buf[1..].to_vec()
-        };
+            match dev.get_feature_report(&mut map_buf) {
+                Ok(sz2) if sz2 >= map_buf.len() => {
+                    mapping = map_buf[1..].to_vec();
+                }
+                Ok(_) => {
+                    // too short; keep identity
+                }
+                Err(e) => {
+                    // Some firmware may omit ID 4 when sequential; keep identity
+                    log::debug!("Feature report 4 unavailable: {} (using identity)", e);
+                }
+            }
+        }
 
         {
             let mut md = self.mapping_data.lock().unwrap();
@@ -439,10 +499,17 @@ impl HidReader {
         let app_handle_arc = self.app_handle.clone();
 
         let handle = thread::spawn(move || {
+            // Build a small single-threaded runtime once for locking the tokio::Mutex
+            let rt = match tokio::runtime::Builder::new_current_thread().enable_time().build() {
+                Ok(r) => r,
+                Err(e) => { log::error!("Failed to build runtime for HID reader: {}", e); return; }
+            };
             let mut preferred_offset: Option<usize> = None; // For heuristic fallback only
             let mut report_count: u64 = 0;
             let mut last_sync_time = std::time::Instant::now();
             const SYNC_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1); // Sync every second
+            // Track full-range logical IDs (supports >64) for mapped mode
+            let mut prev_pressed_set: std::collections::HashSet<u8> = std::collections::HashSet::new();
             // previous logical state no longer needed (we derive changes from stored state)
             // Heuristic baseline variables (used only if mapping feature unsupported)
             let mut baseline_0: Option<u64> = None;
@@ -453,15 +520,12 @@ impl HidReader {
             while running_flag.load(Ordering::SeqCst) {
                 // Build a tiny runtime per loop (cost acceptable given low frequency)
                 let mut buf = [0u8; 64];
-                let maybe_size = {
-                    let rt = match tokio::runtime::Builder::new_current_thread().enable_time().build() { Ok(r) => r, Err(_) => { std::thread::sleep(std::time::Duration::from_millis(20)); continue; } };
-                    rt.block_on(async {
-                        let guard = device_arc.lock().await; // MutexGuard<Option<HidDevice>>
-                        if let Some(device) = guard.as_ref() {
-                            device.read_timeout(&mut buf, 50).ok()
-                        } else { None }
-                    })
-                };
+                let maybe_size = rt.block_on(async {
+                    let guard = device_arc.lock().await; // MutexGuard<Option<HidDevice>>
+                    if let Some(device) = guard.as_ref() {
+                        device.read_timeout(&mut buf, 50).ok()
+                    } else { None }
+                });
                 let Some(sz) = maybe_size else { std::thread::sleep(std::time::Duration::from_millis(10)); continue; };
                 if sz == 0 { continue; }
                 // Store raw report for debugging
@@ -472,79 +536,75 @@ impl HidReader {
                 // Check if mapping feature available
                 let mapping_opt = { mapping_data_arc.lock().unwrap().clone() };
                 if let Some(mapping) = mapping_opt {
-                    // Expect gamepad input report length of 50 (payload) + optional 1 byte report ID at start
-                    let expected_payload_len = 50usize; // per firmware doc
-                    let has_report_id = buf[0] == mapping.info.input_report_id;
+                    // Determine if the first byte is a report ID and derive payload accordingly
+                    let has_report_id = mapping.info.input_report_id != 0 && buf[0] == mapping.info.input_report_id;
                     let payload_start = if has_report_id { 1 } else { 0 };
-                    if sz < expected_payload_len + payload_start { continue; }
-                    let payload = &buf[payload_start..payload_start+expected_payload_len];
+                    if sz <= payload_start { continue; }
+                    let payload = &buf[payload_start..sz];
                     // Buttons start at button_byte_offset
                     let btn_off = mapping.info.button_byte_offset as usize;
                     let btn_bytes_len = ((mapping.info.button_count as usize + 7) / 8).min(16);
                     if payload.len() < btn_off + btn_bytes_len { continue; }
                     let buttons_slice = &payload[btn_off..btn_off+btn_bytes_len];
-                    // Build logical button bitset (u64 for first 64 logical IDs)
+                    // Build full-range logical pressed set and 64-bit mask for UI
+                    let mut new_pressed_set: std::collections::HashSet<u8> = std::collections::HashSet::new();
                     let mut logical_u64: u64 = 0;
                     for bit_index in 0..(mapping.info.button_count as usize) {
                         let byte = buttons_slice[bit_index / 8];
                         let bit_pos = bit_index % 8;
                         let pressed = if mapping.info.button_bit_order == 0 { (byte & (1 << bit_pos)) != 0 } else { (byte & (1 << (7-bit_pos))) != 0 };
                         if pressed {
-                            let logical_id = mapping.mapping.get(bit_index).copied().unwrap_or(bit_index as u8) as usize;
-                            if logical_id < 64 { logical_u64 |= 1u64 << logical_id; }
+                            let logical_id = mapping.mapping.get(bit_index).copied().unwrap_or(bit_index as u8);
+                            new_pressed_set.insert(logical_id);
+                            if (logical_id as usize) < 64 { logical_u64 |= 1u64 << (logical_id as usize); }
                         }
                     }
-                    if let Ok(mut state_guard) = state_arc.lock() {
-                        if state_guard.buttons != logical_u64 {
-                            // Transition detection
-                            let changed = state_guard.buttons ^ logical_u64;
-                            let pressed_now = changed & logical_u64; // bits that turned 1
-                            let released_now = changed & state_guard.buttons; // bits that turned 0
-                            if pressed_now != 0 || released_now != 0 {
-                                // Build small lists (up to first 8 each) for debug
-                                let mut newly_pressed: Vec<u8> = Vec::new();
-                                let mut newly_released: Vec<u8> = Vec::new();
-                                for b in 0..64 { if (pressed_now & (1u64<<b)) != 0 { newly_pressed.push(b as u8); if newly_pressed.len()>=8 { break; }}}
-                                for b in 0..64 { if (released_now & (1u64<<b)) != 0 { newly_released.push(b as u8); if newly_released.len()>=8 { break; }}}
-                                let timestamp = chrono::Utc::now();
-                                log::info!(
-                                    "[BACKEND HID {} @ {}] Button change: pressed={:?} released={:?} (report #{})",
-                                    interface, timestamp.format("%H:%M:%S%.3f"), newly_pressed, newly_released, report_count
-                                );
-                                
-                                // Emit events for button changes
-                                if let Ok(app_handle) = app_handle_arc.lock() {
-                                    if let Some(handle) = app_handle.as_ref() {
-                                        // Emit events for pressed buttons
-                                        for &button_id in &newly_pressed {
-                                            let event = ButtonEvent {
-                                                button_id,
-                                                pressed: true,
-                                                timestamp,
-                                            };
-                                            let _ = handle.emit("button-changed", &event);
-                                        }
-                                        // Emit events for released buttons
-                                        for &button_id in &newly_released {
-                                            let event = ButtonEvent {
-                                                button_id,
-                                                pressed: false,
-                                                timestamp,
-                                            };
-                                            let _ = handle.emit("button-changed", &event);
-                                        }
-                                    }
+                    // Diff sets to detect changes across the entire logical range
+                    let mut pressed_delta: Vec<u8> = Vec::new();
+                    let mut released_delta: Vec<u8> = Vec::new();
+                    for &lid in new_pressed_set.iter() { if !prev_pressed_set.contains(&lid) { pressed_delta.push(lid); } }
+                    for &lid in prev_pressed_set.iter() { if !new_pressed_set.contains(&lid) { released_delta.push(lid); } }
+
+                    if !pressed_delta.is_empty() || !released_delta.is_empty() {
+                        // Keep the previous set in sync
+                        prev_pressed_set = new_pressed_set;
+                        let timestamp = chrono::Utc::now();
+                        // Emit events for all changed buttons (including >63)
+                        if let Ok(app_handle) = app_handle_arc.lock() {
+                            if let Some(handle) = app_handle.as_ref() {
+                                for &button_id in &pressed_delta {
+                                    let event = ButtonEvent { button_id, pressed: true, timestamp };
+                                    let _ = handle.emit("button-changed", &event);
+                                }
+                                for &button_id in &released_delta {
+                                    let event = ButtonEvent { button_id, pressed: false, timestamp };
+                                    let _ = handle.emit("button-changed", &event);
                                 }
                             }
-                            state_guard.buttons = logical_u64;
-                            state_guard.timestamp = chrono::Utc::now();
-                            if let Ok(mut off) = sel_offset_arc.lock() { *off = Some(btn_off + payload_start); }
-                            if let Ok(mut raw) = last_raw_arc.lock() { *raw = logical_u64; }
-                            if report_count <= 5 { log::info!("[HID iface {}] mapped buttons=0x{:016X} ({} logical, offset {} report_id_present={})", interface, logical_u64, mapping.info.button_count, btn_off + payload_start, has_report_id); }
-                        } else if report_count % 200 == 0 { // periodic heartbeat
-                            state_guard.timestamp = chrono::Utc::now();
-                            log::debug!("[HID iface {}] heartbeat rpt#{} no change", interface, report_count);
                         }
+                        // Update cached 64-bit state for UI
+                        if let Ok(mut state_guard) = state_arc.lock() {
+                            state_guard.buttons = logical_u64;
+                            state_guard.timestamp = timestamp;
+                        }
+                        if let Ok(mut off) = sel_offset_arc.lock() { *off = Some(btn_off + payload_start); }
+                        if let Ok(mut raw) = last_raw_arc.lock() { *raw = logical_u64; }
+                        // Trim for logging readability
+                        let mut p0 = pressed_delta.clone(); p0.sort(); let p0 = if p0.len()>8 { p0[..8].to_vec() } else { p0 };
+                        let mut r0 = released_delta.clone(); r0.sort(); let r0 = if r0.len()>8 { r0[..8].to_vec() } else { r0 };
+                        // Display logical IDs as 1-based in logs to match firmware tools (e.g., VKB btntester)
+                        let p_disp: Vec<u8> = p0.iter().map(|v| v.saturating_add(1)).collect();
+                        let r_disp: Vec<u8> = r0.iter().map(|v| v.saturating_add(1)).collect();
+                        log::info!(
+                            "[HID iface {}] mapped change: pressed={:?} released={:?} mask64=0x{:016X} ({} logical, off {} rid_present={} len={}, id_base=1)",
+                            interface, p_disp, r_disp, logical_u64, mapping.info.button_count, btn_off + payload_start, has_report_id, sz
+                        );
+                    } else if report_count % 200 == 0 {
+                        // Heartbeat: refresh timestamp so UI doesn’t stale out
+                        if let Ok(mut state_guard) = state_arc.lock() {
+                            state_guard.timestamp = chrono::Utc::now();
+                        }
+                        log::debug!("[HID iface {}] heartbeat rpt#{} no change", interface, report_count);
                     }
                     continue; // processed
                 }
@@ -573,8 +633,9 @@ impl HidReader {
                     1 => dyn1,
                     _ => dyn_extra.iter().find(|(s, _)| *s == chosen_offset).map(|(_, v)| *v).unwrap_or(0)
                 };
-                // Align firmware logical button IDs starting at 1 => shift dynamic bits left by 1 so bit position == firmware ID.
-                let logical_val = chosen_dyn_val << 1;
+                // Previously we shifted dynamic bits left by 1 assuming firmware logical button IDs started at 1.
+                // This caused off-by-one mismatches in UI highlighting. Use raw dynamic bits directly.
+                let logical_val = chosen_dyn_val;
                 if let Ok(mut state_guard) = state_arc.lock() {
                     if state_guard.buttons != logical_val {
                         let changed = state_guard.buttons ^ logical_val;
@@ -648,5 +709,94 @@ impl HidReader {
         let mut handle_guard = self.reader_handle.lock().await;
         *handle_guard = Some(handle);
         Ok(())
+    }
+}
+
+// --- Tests -----------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper: construct a raw feature report ID 3 buffer (1 + 16 bytes) matching HIDMappingInfoRaw
+    fn build_feature_report_3(
+        protocol_version: u8,
+        input_report_id: u8,
+        button_count: u8,
+        axis_count: u8,
+        button_byte_offset: u8,
+        button_bit_order: u8,
+        mapping_crc: u16,
+        frame_counter_offset: u8,
+    ) -> [u8; 1 + std::mem::size_of::<HIDMappingInfoRaw>()] {
+        let mut buf = [0u8; 1 + std::mem::size_of::<HIDMappingInfoRaw>()];
+        buf[0] = 3; // feature report ID
+        // Fill struct bytes
+        let mut raw = HIDMappingInfoRaw::default();
+        raw.protocol_version = protocol_version;
+        raw.input_report_id = input_report_id;
+        raw.button_count = button_count;
+        raw.axis_count = axis_count;
+        raw.button_byte_offset = button_byte_offset;
+        raw.button_bit_order = button_bit_order;
+        raw.mapping_crc = mapping_crc;
+        raw.frame_counter_offset = frame_counter_offset;
+        // reserved already zeroed
+        let raw_bytes = unsafe {
+            std::slice::from_raw_parts((&raw as *const HIDMappingInfoRaw) as *const u8, std::mem::size_of::<HIDMappingInfoRaw>())
+        };
+        buf[1..].copy_from_slice(raw_bytes);
+        buf
+    }
+
+    #[test]
+    fn parse_sequential_mapping_info() {
+        // button_count = 12, mapping_crc=0 -> sequential
+        let buf = build_feature_report_3(1, 0x01, 12, 4, 10, 0, 0x0000, 0xFF);
+        // Emulate logic in try_fetch_mapping() for info extraction
+        let mut raw = HIDMappingInfoRaw::default();
+        let raw_slice = unsafe { std::slice::from_raw_parts_mut((&mut raw as *mut HIDMappingInfoRaw) as *mut u8, std::mem::size_of::<HIDMappingInfoRaw>()) };
+        raw_slice.copy_from_slice(&buf[1..]);
+    let protocol_version = raw.protocol_version;
+    let input_report_id = raw.input_report_id;
+    let button_count = raw.button_count;
+    let axis_count = raw.axis_count;
+    let button_byte_offset = raw.button_byte_offset;
+    let button_bit_order = raw.button_bit_order;
+    let mapping_crc = raw.mapping_crc;
+    let frame_counter_offset = raw.frame_counter_offset;
+    assert_eq!(protocol_version, 1);
+    assert_eq!(input_report_id, 0x01);
+    assert_eq!(button_count, 12);
+    assert_eq!(axis_count, 4);
+    assert_eq!(button_byte_offset, 10);
+    assert_eq!(button_bit_order, 0);
+    assert_eq!(mapping_crc, 0x0000);
+    assert_eq!(frame_counter_offset, 0xFF);
+        // Sequential mapping should be identity 0..button_count-1
+    let mapping: Vec<u8> = (0..button_count).collect();
+        assert_eq!(mapping.len(), 12);
+        for (i, v) in mapping.iter().enumerate() { assert_eq!(*v as usize, i); }
+    }
+
+    #[test]
+    fn parse_custom_mapping_info() {
+        // Custom mapping indicated by non-zero CRC. We don't compute CRC here; just ensure mapping path logic assumptions hold.
+        let buf = build_feature_report_3(1, 0x02, 8, 2, 5, 0, 0x1234, 0x0A);
+        let mut raw = HIDMappingInfoRaw::default();
+        let raw_slice = unsafe { std::slice::from_raw_parts_mut((&mut raw as *mut HIDMappingInfoRaw) as *mut u8, std::mem::size_of::<HIDMappingInfoRaw>()) };
+        raw_slice.copy_from_slice(&buf[1..]);
+        let button_count = raw.button_count;
+        let mapping_crc = raw.mapping_crc;
+        assert_eq!(mapping_crc, 0x1234);
+        // Simulate receiving feature report 4 (mapping vector) of length button_count
+        let feature4: Vec<u8> = vec![0,2,4,6,1,3,5,7]; // arbitrary permutation
+        assert_eq!(feature4.len(), button_count as usize);
+        // Validate logical->physical translation expectation: mapping[bit_index] gives logical id
+        for (bit_index, logical_id) in feature4.iter().enumerate() {
+            // Each logical id should be within range
+            assert!((*logical_id as usize) < button_count as usize);
+            // Example: check uniqueness (simple O(n^2) fine for small test)
+            for (j, other) in feature4.iter().enumerate() { if j != bit_index { assert_ne!(logical_id, other); } }
+        }
     }
 }

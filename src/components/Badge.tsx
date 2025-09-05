@@ -17,15 +17,20 @@ const variantMap: Record<string, BadgeVariantProp> = {
   brand2: 'brand2',
   brand3: 'brand3',
   brand4: 'brand4',
-  brand5: 'brand5'
+  brand5: 'brand5',
+  // Aliases used by RawStateBadge
+  green: 'success',
+  blue: 'info',
+  gray: 'muted',
 };
 
 export interface BadgeProps extends Omit<React.ComponentProps<typeof UIBadge>, 'variant'> {
   variant?: keyof typeof variantMap;
   size?: 'sm' | 'md' | 'lg';
+  inactive?: boolean; // used for styling/accessibility; not forwarded as a DOM attr
 }
 
-export function Badge({ variant = 'default', size = 'md', className, ...rest }: BadgeProps) {
+export function Badge({ variant = 'default', size = 'md', className, inactive, ...rest }: BadgeProps) {
   const mapped: BadgeVariantProp = variantMap[variant] ?? 'default';
   const sizeClasses =
     size === 'sm'
@@ -37,7 +42,8 @@ export function Badge({ variant = 'default', size = 'md', className, ...rest }: 
   return (
     <UIBadge
       variant={mapped}
-      className={cn(sizeClasses, className)}
+      className={cn(sizeClasses, inactive ? 'opacity-70' : '', className)}
+      aria-disabled={inactive ? true : undefined}
       {...rest}
     />
   );
