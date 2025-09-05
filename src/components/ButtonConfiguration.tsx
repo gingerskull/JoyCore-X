@@ -242,7 +242,7 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
       if (b.id === oldId) {
         // Preserve physical segment in name (text inside parentheses)
         const phys = b.name.match(/\(.*\)/)?.[0] || '';
-        return { ...b, id: newId, name: `Button ${newId} ${phys}`.trim() };
+  return { ...b, id: newId, name: `Button ${newId} ${phys}`.trim() };
       }
       return b;
     }));
@@ -689,7 +689,8 @@ export function ButtonConfiguration({ deviceStatus, isConnected = false, parsedB
                   //  - In HID mode: logical button currently pressed
                   //  - In RAW mode: associated physical resource is active (heuristic per type)
                   // Highlight only on HID logical press now (independent of displayMode since we force 'both')
-                  const logicalPressed = isButtonPressed(button.id);
+                  // Highlight uses the event/mask (zero-based). If table IDs are 1-based, map to zero-based for highlight.
+                  const logicalPressed = isButtonPressed(Math.max(0, button.id - 1));
                   const highlight = state.enabled && logicalPressed && !!physSegment;
                   return (
                     <TableRow 
